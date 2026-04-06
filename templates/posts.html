@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Posts{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+    <h2 class="text-2xl font-bold text-gray-800">Posts</h2>
+    <div class="flex gap-2">
+        <form method="POST" action="/posts/bulk-approve" id="bulk-form">
+            <button type="submit" class="px-3 py-1.5 rounded-md text-sm text-white font-medium" style="background:{{ accent_color }}">
+                Bulk Approve Selected
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="flex flex-wrap gap-2 mb-4">
+    <a href="/posts?status=all&platform={{ platform_filter }}"
+       class="px-3 py-1 rounded-full text-xs font-medium {% if status_filter == 'all' %}bg-gray-800 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">All</a>
+    {% for s in ['draft', 'approved', 'scheduled', 'published', 'failed', 'needs_revision'] %}
+    <a href="/posts?status={{ s }}&platform={{ platform_filter }}"
+       class="px-3 py-1 rounded-full text-xs font-medium {% if status_filter == s %}bg-gray-800 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">{{ s | replace('_', ' ') | title }}</a>
+    {% endfor %}
+    <span class="text-gray-300 mx-1">|</span>
+    <a href="/posts?status={{ status_filter }}&platform=all"
+       class="px-3 py-1 rounded-full text-xs font-medium {% if platform_filter == 'all' %}bg-gray-800 text-white{% else %}bg-gray-100 text-gray-600{% endif %}">All Platforms</a>
+    {% for p in ['facebook', 'instagram', 'tiktok', 'linkedin'] %}
+    <a href="/posts?status={{ status_filter }}&platform={{ p }}"
+       class="px-3 py-1 rounded-full text-xs font-medium {% if platform_filter == p %}bg-gray-800 text-white{% else %}bg-gray-100 text-gray-600{% endif %}">{{ p | capitalize }}</a>
+    {% endfor %}
+</div>
+
+<!-- Posts Table -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+                <tr>
+                    <th class="px-4 py-3 text-left w-8">
+                        <input type="checkbox" onclick="toggleAll(this)" class="rounded">
+                    </th>
+                    <th class="px-4 py-3 text-left">Platform</th>
+                    <th class="px-4 py-3 text-left">Caption Preview</th>
+                    <th class="px-4 py-3 text-left">Status</th>
+                    <th class="px-4 py-3 text-left">Scheduled</th>
+                    <th class="px-4 py-3 text-left">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for post in posts %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3">
+                        <input type="checkbox" name="post_ids" value="{{ post.id }}" form="bulk-form" class="rounded post-checkbox">
+                    </td>
+                    <td class="px-4 py-3">
+                        {% if post.platform == 'facebook' %}<span class="text-blue-600 font-bold">FB</span>
+                        {% elif post.platform == 'instagram' %}<span class="text-pink-500 font-bold">IG</span>
+                        {% elif post.platform == 'tiktok' %}<span class="font-bold">TT</span>
+                        {% elif post.platform == 'linkedin' %}<span class="text-blue-700 font-bold">LI</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 max-w-md">
+                        <a href="/posts/{{ post.id }}" class="text-gray-800 hover:underline">
+                            {{ (post.caption or 'No caption yet')[:80] }}{% if post.caption and post.caption|length > 80 %}...{% endif %}
+                        </a>
+                    </td>
+                    <td class="px-4 py-3">
+                        {% set s = post.status %}
+                        <span class="px-2.5 py-1 rounded-full text-xs font-medium
+                            {% if s == 'published' %}bg-green-100 text-green-700
+                            {% elif s == 'approved' %}bg-blue-100 text-blue-700
+                            {% elif s == 'scheduled' %}bg-amber-100 text-amber-700
+                            {% elif s == 'draft' %}bg-gray-100 text-gray-600
+                            {% elif s == 'failed' %}bg-red-100 text-red-700
+                            {% elif s == 'needs_revision' %}bg-orange-100 text-orange-700
+                            {% endif %}">{{ s | replace('_', ' ') | title }}</span>
+                    </td>
+                    <td class="px-4 py-3 text-gray-500 text-xs">{{ post.scheduled_time | format_dt }}</td>
+                    <td class="px-4 py-3">
+                        <div class="flex gap-1">
+                            {% if post.status in ('draft', 'needs_revision') %}
+                            <form method="POST" action="/posts/{{ post.id }}/approve" class="inline">
+                                <button class="px-2 py-1 text-xs rounded bg-green-50 text-green-700 hover:bg-green-100">Approve</button>
+                            </form>
+                            {% endif %}
+                            <a href="/posts/{{ post.id }}" class="px-2 py-1 text-xs rounded bg-gray-50 text-gray-600 hover:bg-gray-100">View</a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="px-4 py-12 text-center text-gray-400">
+                        No posts found. Run the Caption Writer agent to generate posts.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function toggleAll(el) {
+    document.querySelectorAll('.post-checkbox').forEach(cb => cb.checked = el.checked);
+}
+</script>
+{% endblock %}

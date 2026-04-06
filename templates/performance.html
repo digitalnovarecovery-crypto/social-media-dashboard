@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Performance{% endblock %}
+{% block content %}
+<h2 class="text-2xl font-bold text-gray-800 mb-6">Performance — {{ brand_name }}</h2>
+
+<!-- Platform Summary Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    {% for platform, summary in platform_summary.items() %}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <div class="flex items-center gap-2 mb-2">
+            {% if platform == 'facebook' %}<span class="text-blue-600 font-bold">FB</span>
+            {% elif platform == 'instagram' %}<span class="text-pink-500 font-bold">IG</span>
+            {% elif platform == 'tiktok' %}<span class="font-bold">TT</span>
+            {% elif platform == 'linkedin' %}<span class="text-blue-700 font-bold">LI</span>
+            {% endif %}
+            <span class="text-sm font-medium text-gray-800 capitalize">{{ platform }}</span>
+        </div>
+        <div class="space-y-1 text-sm">
+            <div class="flex justify-between">
+                <span class="text-gray-500">Published</span>
+                <span class="font-medium">{{ summary.total_published }}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500">Total Reach</span>
+                <span class="font-medium">{{ "{:,}".format(summary.total_reach) }}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500">Followers</span>
+                <span class="font-medium">{{ "{:,}".format(summary.latest_followers) }}</span>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-span-4 bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+        <p class="text-gray-500 mb-4">No performance data yet.</p>
+        <form method="POST" action="/agents/performance_analyst/run">
+            <button type="submit" class="px-4 py-2 rounded-lg text-white text-sm font-medium" style="background:{{ accent_color }}">
+                Run Performance Analyst
+            </button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Call Goal Tracker -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+    <h3 class="font-semibold text-gray-800 mb-4">Monthly Call Goal: 60 Qualified Calls</h3>
+    <div class="flex items-center gap-4">
+        <div class="flex-1">
+            <div class="w-full bg-gray-200 rounded-full h-4">
+                <div class="h-4 rounded-full transition-all" style="width:0%; background:{{ accent_color }}"></div>
+            </div>
+        </div>
+        <span class="text-sm font-bold text-gray-700">0 / 60</span>
+    </div>
+    <p class="text-xs text-gray-400 mt-2">Call attribution requires connecting tracking numbers to call analytics. Configure in Settings.</p>
+</div>
+
+<!-- Weekly Metrics Table -->
+{% if metrics %}
+<div class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="px-5 py-4 border-b border-gray-100">
+        <h3 class="font-semibold text-gray-800">Weekly Metrics History</h3>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+                <tr>
+                    <th class="px-4 py-3 text-left">Week Ending</th>
+                    <th class="px-4 py-3 text-left">Platform</th>
+                    <th class="px-4 py-3 text-left">Published</th>
+                    <th class="px-4 py-3 text-left">Engagement</th>
+                    <th class="px-4 py-3 text-left">Reach</th>
+                    <th class="px-4 py-3 text-left">Followers</th>
+                    <th class="px-4 py-3 text-left">Calls</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for m in metrics %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2 text-gray-700">{{ m.week_ending }}</td>
+                    <td class="px-4 py-2 capitalize">{{ m.platform }}</td>
+                    <td class="px-4 py-2">{{ m.posts_published }}</td>
+                    <td class="px-4 py-2">{{ "%.1f" | format(m.engagement_rate) }}%</td>
+                    <td class="px-4 py-2">{{ "{:,}".format(m.reach) }}</td>
+                    <td class="px-4 py-2">{{ "{:,}".format(m.followers) }}</td>
+                    <td class="px-4 py-2">{{ m.calls_attributed }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

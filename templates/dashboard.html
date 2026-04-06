@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h2 class="text-2xl font-bold text-gray-800 mb-6">{{ brand_name }} — Command Center</h2>
+
+<!-- Metric Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <p class="text-sm text-gray-500">Posts This Week</p>
+        <p class="text-3xl font-bold mt-1" style="color:{{ accent_color }}">{{ posts_week }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <p class="text-sm text-gray-500">Queued (Draft + Approved)</p>
+        <p class="text-3xl font-bold text-blue-600 mt-1">{{ posts_queued }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <p class="text-sm text-gray-500">Published Total</p>
+        <p class="text-3xl font-bold text-green-600 mt-1">{{ posts_published }}</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <p class="text-sm text-gray-500">Call Goal Progress</p>
+        <p class="text-3xl font-bold text-amber-600 mt-1">— / 60</p>
+        <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+            <div class="h-2 rounded-full" style="width:0%; background:{{ accent_color }}"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Agent Status Grid -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
+    <div class="px-5 py-4 border-b border-gray-100">
+        <h3 class="font-semibold text-gray-800">AI Team Status</h3>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
+        {% for agent_key, agent in agent_statuses.items() %}
+        <div class="border border-gray-100 rounded-lg p-4 hover:shadow-sm transition-shadow">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">{{ agent.info.icon }}</span>
+                    <span class="font-medium text-gray-800">{{ agent.info.name }}</span>
+                </div>
+                {% set s = agent.status %}
+                {% if s == 'completed' %}
+                <span class="status-dot green"></span>
+                {% elif s == 'running' %}
+                <span class="status-dot blue"></span>
+                {% elif s == 'failed' %}
+                <span class="status-dot red"></span>
+                {% else %}
+                <span class="status-dot gray"></span>
+                {% endif %}
+            </div>
+            <p class="text-xs text-gray-500">{{ agent.info.desc }}</p>
+            {% if agent.last_run %}
+            <p class="text-xs text-gray-400 mt-1">Last: {{ agent.last_run.started_at | format_dt }} — {{ agent.last_run.status }}</p>
+            {% else %}
+            <p class="text-xs text-gray-400 mt-1">Never run</p>
+            {% endif %}
+            <form method="POST" action="/agents/{{ agent_key }}/run" class="mt-2">
+                <button type="submit" class="text-xs px-3 py-1 rounded-md text-white" style="background:{{ accent_color }}">Run Now</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Platform Overview -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <!-- Per-platform stats -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-5 py-4 border-b border-gray-100">
+            <h3 class="font-semibold text-gray-800">Platform Overview</h3>
+        </div>
+        <div class="p-5 space-y-3">
+            {% for platform, counts in platform_counts.items() %}
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    {% if platform == 'facebook' %}
+                    <span class="text-blue-600 font-bold text-sm">FB</span>
+                    {% elif platform == 'instagram' %}
+                    <span class="text-pink-500 font-bold text-sm">IG</span>
+                    {% elif platform == 'tiktok' %}
+                    <span class="text-gray-800 font-bold text-sm">TT</span>
+                    {% elif platform == 'linkedin' %}
+                    <span class="text-blue-700 font-bold text-sm">LI</span>
+                    {% endif %}
+                    <span class="text-sm text-gray-700 capitalize">{{ platform }}</span>
+                </div>
+                <div class="flex items-center gap-4 text-xs">
+                    <span class="text-green-600">{{ counts.published }} published</span>
+                    <span class="text-blue-500">{{ counts.queued }} queued</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Upcoming posts -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+            <h3 class="font-semibold text-gray-800">Next Up</h3>
+            <a href="/posts?status=approved" class="text-sm hover:underline" style="color:{{ accent_color }}">View all</a>
+        </div>
+        <div class="divide-y divide-gray-50">
+            {% for post in upcoming[:6] %}
+            <div class="px-5 py-3 flex items-center justify-between">
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm text-gray-800 truncate">{{ (post.caption or 'No caption')[:60] }}...</p>
+                    <p class="text-xs text-gray-400 mt-0.5">{{ post.platform | capitalize }} — {{ post.scheduled_time | format_dt }}</p>
+                </div>
+                <span class="ml-3 px-2 py-0.5 rounded-full text-xs font-medium
+                    {% if post.status == 'approved' %}bg-blue-100 text-blue-700
+                    {% elif post.status == 'scheduled' %}bg-amber-100 text-amber-700
+                    {% else %}bg-gray-100 text-gray-600{% endif %}">
+                    {{ post.status }}
+                </span>
+            </div>
+            {% else %}
+            <div class="px-5 py-8 text-center text-sm text-gray-400">
+                No upcoming posts. Run the Content Strategist and Caption Writer to get started.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

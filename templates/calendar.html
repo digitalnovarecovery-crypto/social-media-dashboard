@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Content Calendar{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+    <h2 class="text-2xl font-bold text-gray-800">Content Calendar — {{ month }}</h2>
+    <div class="flex gap-2">
+        <a href="/calendar?month={{ month }}" class="px-3 py-1.5 rounded-md text-sm border border-gray-200 hover:bg-gray-50">Refresh</a>
+    </div>
+</div>
+
+{% if not entries %}
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+    <p class="text-gray-500 mb-4">No calendar entries for {{ month }}.</p>
+    <form method="POST" action="/agents/content_strategist/run">
+        <input type="hidden" name="brand_id" value="{{ brand_id }}">
+        <button type="submit" class="px-4 py-2 rounded-lg text-white text-sm font-medium" style="background:{{ accent_color }}">
+            Generate Calendar Now
+        </button>
+    </form>
+</div>
+{% else %}
+
+<!-- Summary -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+    <div class="bg-white rounded-lg border p-3 text-center">
+        <p class="text-2xl font-bold" style="color:{{ accent_color }}">{{ entries | length }}</p>
+        <p class="text-xs text-gray-500">Total Posts</p>
+    </div>
+    <div class="bg-white rounded-lg border p-3 text-center">
+        <p class="text-2xl font-bold text-blue-600">{{ entries | selectattr('platform', 'equalto', 'facebook') | list | length }}</p>
+        <p class="text-xs text-gray-500">Facebook</p>
+    </div>
+    <div class="bg-white rounded-lg border p-3 text-center">
+        <p class="text-2xl font-bold text-pink-500">{{ entries | selectattr('platform', 'equalto', 'instagram') | list | length }}</p>
+        <p class="text-xs text-gray-500">Instagram</p>
+    </div>
+    <div class="bg-white rounded-lg border p-3 text-center">
+        <p class="text-2xl font-bold text-gray-800">{{ entries | selectattr('platform', 'equalto', 'tiktok') | list | length + entries | selectattr('platform', 'equalto', 'linkedin') | list | length }}</p>
+        <p class="text-xs text-gray-500">TikTok + LinkedIn</p>
+    </div>
+</div>
+
+<!-- Calendar by week -->
+{% for week_num, week_entries in by_week.items() | sort %}
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
+    <div class="px-5 py-3 border-b border-gray-100 bg-gray-50">
+        <h3 class="font-semibold text-gray-700">Week {{ week_num }}</h3>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="text-gray-500 uppercase text-xs bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left">Day</th>
+                    <th class="px-4 py-2 text-left">Platform</th>
+                    <th class="px-4 py-2 text-left">Pillar</th>
+                    <th class="px-4 py-2 text-left">Format</th>
+                    <th class="px-4 py-2 text-left">Topic</th>
+                    <th class="px-4 py-2 text-left">Level</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for entry in week_entries %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2 font-medium text-gray-700">{{ entry.day }}</td>
+                    <td class="px-4 py-2">
+                        {% if entry.platform == 'facebook' %}<span class="text-blue-600 font-medium">FB</span>
+                        {% elif entry.platform == 'instagram' %}<span class="text-pink-500 font-medium">IG</span>
+                        {% elif entry.platform == 'tiktok' %}<span class="text-gray-800 font-medium">TT</span>
+                        {% elif entry.platform == 'linkedin' %}<span class="text-blue-700 font-medium">LI</span>
+                        {% else %}{{ entry.platform }}{% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-gray-600">{{ entry.pillar | replace('_', ' ') | title }}</td>
+                    <td class="px-4 py-2">
+                        <span class="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">{{ entry.format | replace('_', ' ') }}</span>
+                    </td>
+                    <td class="px-4 py-2 text-gray-800 max-w-md truncate">{{ entry.topic }}</td>
+                    <td class="px-4 py-2">
+                        {% if entry.awareness_level == 'bof' %}<span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">BoF</span>
+                        {% elif entry.awareness_level == 'mof' %}<span class="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700">MoF</span>
+                        {% else %}<span class="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">ToF</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

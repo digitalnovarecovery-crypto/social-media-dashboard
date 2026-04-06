@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Agents{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+    <h2 class="text-2xl font-bold text-gray-800">AI Team — Agents</h2>
+    <form method="POST" action="/agents/content_strategist/run">
+        <button type="submit" class="px-4 py-2 rounded-lg text-white text-sm font-medium" style="background:{{ accent_color }}">
+            Run Full Pipeline
+        </button>
+    </form>
+</div>
+
+<div class="space-y-6">
+{% for agent in agents %}
+<div class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <span class="text-2xl">{{ agent.info.icon }}</span>
+            <div>
+                <h3 class="font-semibold text-gray-800">{{ agent.info.name }}</h3>
+                <p class="text-xs text-gray-500">{{ agent.info.desc }}</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            {% set s = agent.last_status %}
+            <span class="px-2.5 py-1 rounded-full text-xs font-medium
+                {% if s == 'completed' %}bg-green-100 text-green-800
+                {% elif s == 'running' %}bg-blue-100 text-blue-800
+                {% elif s == 'failed' %}bg-red-100 text-red-800
+                {% else %}bg-gray-100 text-gray-600{% endif %}">
+                {{ s | replace('_', ' ') | title }}
+            </span>
+            <form method="POST" action="/agents/{{ agent.key }}/run">
+                <input type="hidden" name="brand_id" value="{{ brand_id }}">
+                <button type="submit" class="px-3 py-1.5 rounded-md text-white text-xs font-medium" style="background:{{ brand_color }}">
+                    Run Now
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {% if agent.next_run %}
+    <div class="px-5 py-2 bg-gray-50 text-xs text-gray-500">
+        Next scheduled run: {{ agent.next_run.strftime('%b %d at %H:%M') }}
+    </div>
+    {% endif %}
+
+    {% if agent.runs %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+                <tr>
+                    <th class="px-5 py-2 text-left">Started</th>
+                    <th class="px-5 py-2 text-left">Brand</th>
+                    <th class="px-5 py-2 text-left">Status</th>
+                    <th class="px-5 py-2 text-left">Created</th>
+                    <th class="px-5 py-2 text-left">Published</th>
+                    <th class="px-5 py-2 text-left">Duration</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for run in agent.runs[:5] %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-5 py-2 text-gray-600">{{ run.started_at | format_dt }}</td>
+                    <td class="px-5 py-2 text-gray-600">{{ run.brand_id }}</td>
+                    <td class="px-5 py-2">
+                        <span class="px-2 py-0.5 rounded-full text-xs font-medium
+                            {% if run.status == 'completed' %}bg-green-100 text-green-700
+                            {% elif run.status == 'running' %}bg-blue-100 text-blue-700
+                            {% elif run.status == 'failed' %}bg-red-100 text-red-700
+                            {% else %}bg-gray-100 text-gray-600{% endif %}">
+                            {{ run.status }}
+                        </span>
+                    </td>
+                    <td class="px-5 py-2 text-gray-600">{{ run.posts_created }}</td>
+                    <td class="px-5 py-2 text-gray-600">{{ run.posts_published }}</td>
+                    <td class="px-5 py-2 text-gray-400 text-xs">
+                        {% if run.completed_at and run.started_at %}
+                        {{ ((run.completed_at - run.started_at).total_seconds() | int) }}s
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="px-5 py-4 text-sm text-gray-400">No runs yet.</div>
+    {% endif %}
+</div>
+{% endfor %}
+</div>
+{% endblock %}

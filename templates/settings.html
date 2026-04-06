@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h2 class="text-2xl font-bold text-gray-800 mb-6">Settings</h2>
+
+<!-- Brand Configurations -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
+    <div class="px-5 py-4 border-b border-gray-100">
+        <h3 class="font-semibold text-gray-800">Brand Configurations</h3>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+                <tr>
+                    <th class="px-5 py-3 text-left">Brand</th>
+                    <th class="px-5 py-3 text-left">Color</th>
+                    <th class="px-5 py-3 text-left">Accent</th>
+                    <th class="px-5 py-3 text-left">Context Path</th>
+                    <th class="px-5 py-3 text-left">Active</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for brand in brands %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-5 py-3 font-medium text-gray-800">{{ brand.name }}</td>
+                    <td class="px-5 py-3">
+                        <div class="flex items-center gap-2">
+                            <div class="w-5 h-5 rounded border" style="background:{{ brand.brand_color }}"></div>
+                            <span class="text-xs font-mono text-gray-500">{{ brand.brand_color }}</span>
+                        </div>
+                    </td>
+                    <td class="px-5 py-3">
+                        <div class="flex items-center gap-2">
+                            <div class="w-5 h-5 rounded border" style="background:{{ brand.accent_color }}"></div>
+                            <span class="text-xs font-mono text-gray-500">{{ brand.accent_color }}</span>
+                        </div>
+                    </td>
+                    <td class="px-5 py-3 text-xs text-gray-500 font-mono max-w-xs truncate">{{ brand.context_path }}</td>
+                    <td class="px-5 py-3">
+                        {% if brand.active %}
+                        <span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">Active</span>
+                        {% else %}
+                        <span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">Inactive</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Platform API Tokens -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
+    <div class="px-5 py-4 border-b border-gray-100">
+        <h3 class="font-semibold text-gray-800">Platform API Connections</h3>
+        <p class="text-xs text-gray-500 mt-1">Add API tokens to enable autonomous publishing. Without tokens, posts will be generated but require manual publishing.</p>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+                <tr>
+                    <th class="px-5 py-3 text-left">Brand</th>
+                    <th class="px-5 py-3 text-left">Platform</th>
+                    <th class="px-5 py-3 text-left">Tracking Phone</th>
+                    <th class="px-5 py-3 text-left">API Token</th>
+                    <th class="px-5 py-3 text-left">Page/Account ID</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for token in tokens %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-5 py-3 font-medium text-gray-800">{{ token.brand_id }}</td>
+                    <td class="px-5 py-3 capitalize">
+                        {% if token.platform == 'facebook' %}<span class="text-blue-600 font-medium">Facebook</span>
+                        {% elif token.platform == 'instagram' %}<span class="text-pink-500 font-medium">Instagram</span>
+                        {% elif token.platform == 'tiktok' %}<span class="font-medium">TikTok</span>
+                        {% elif token.platform == 'linkedin' %}<span class="text-blue-700 font-medium">LinkedIn</span>
+                        {% else %}{{ token.platform }}{% endif %}
+                    </td>
+                    <td class="px-5 py-3 text-gray-600">{{ token.tracking_phone or '—' }}</td>
+                    <td class="px-5 py-3">
+                        {% if token.access_token %}
+                        <span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">Connected</span>
+                        {% else %}
+                        <span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">Not configured</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-5 py-3 text-xs text-gray-500 font-mono">{{ token.page_id or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Agent Schedules -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="px-5 py-4 border-b border-gray-100">
+        <h3 class="font-semibold text-gray-800">Agent Schedules</h3>
+    </div>
+    <div class="p-5 space-y-3 text-sm">
+        <div class="flex justify-between items-center py-2 border-b border-gray-50">
+            <div>
+                <span class="font-medium text-gray-800">Content Strategist</span>
+                <span class="text-gray-400 ml-2">Calendar generation</span>
+            </div>
+            <span class="text-xs font-mono bg-gray-100 px-2 py-1 rounded">1st of month @ 6:00 AM</span>
+        </div>
+        <div class="flex justify-between items-center py-2 border-b border-gray-50">
+            <div>
+                <span class="font-medium text-gray-800">Caption Writer</span>
+                <span class="text-gray-400 ml-2">Daily captions</span>
+            </div>
+            <span class="text-xs font-mono bg-gray-100 px-2 py-1 rounded">Daily @ 6:00 AM</span>
+        </div>
+        <div class="flex justify-between items-center py-2 border-b border-gray-50">
+            <div>
+                <span class="font-medium text-gray-800">Creative Director</span>
+                <span class="text-gray-400 ml-2">Visual prompts</span>
+            </div>
+            <span class="text-xs font-mono bg-gray-100 px-2 py-1 rounded">Daily @ 7:00 AM</span>
+        </div>
+        <div class="flex justify-between items-center py-2 border-b border-gray-50">
+            <div>
+                <span class="font-medium text-gray-800">Brand Reviewer</span>
+                <span class="text-gray-400 ml-2">QA check</span>
+            </div>
+            <span class="text-xs font-mono bg-gray-100 px-2 py-1 rounded">Daily @ 8:00 AM</span>
+        </div>
+        <div class="flex justify-between items-center py-2 border-b border-gray-50">
+            <div>
+                <span class="font-medium text-gray-800">Publisher</span>
+                <span class="text-gray-400 ml-2">Platform posting</span>
+            </div>
+            <span class="text-xs font-mono bg-gray-100 px-2 py-1 rounded">Every 15 minutes</span>
+        </div>
+        <div class="flex justify-between items-center py-2">
+            <div>
+                <span class="font-medium text-gray-800">Performance Analyst</span>
+                <span class="text-gray-400 ml-2">Weekly metrics</span>
+            </div>
+            <span class="text-xs font-mono bg-gray-100 px-2 py-1 rounded">Mondays @ 9:00 AM</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
