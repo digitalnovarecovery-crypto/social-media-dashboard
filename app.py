@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config import BRANDS, AGENT_SCHEDULES, FLASK_SECRET, FLASK_DEBUG, PORT
 from db.models import (
-    AgentRun, Brand, CalendarEntry, Metric, OAuthToken, Post,
+    AgentRun, Brand, CallRecord, CalendarEntry, Metric, OAuthToken, Post,
     get_db, init_db,
 )
 from agents import ALL_AGENTS, AGENT_DISPLAY
@@ -40,6 +40,13 @@ def run_agent_job(agent_key: str, brand_id: str | None = None):
 
 def setup_scheduler():
     """Register all agent schedules."""
+    # Token Manager: daily at 5am (before other agents)
+    scheduler.add_job(
+        run_agent_job, "cron",
+        args=["token_manager"],
+        hour=5, minute=0,
+        id="token_manager", replace_existing=True,
+    )
     # Content Strategist: 1st of month
     scheduler.add_job(
         run_agent_job, "cron",
@@ -426,6 +433,86 @@ def api_post_counts():
     }
     db.close()
     return jsonify(counts)
+
+
+@app.route("/api/kpi")
+def api_kpi():
+    """Return monthly KPI progress — 60 calls/month, 10% conversion."""
+    db = get_db()
+    now = datetime.utcnow()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    # All brands combined for the 60 calls/month goal
+    total_calls = db.query(CallRecord).filter(CallRecord.call_time >= month_start).count()
+    qualified = db.query(CallRecord).filter(
+        CallRecord.call_time >= month_start, CallRecord.qualified == True
+    ).count()
+    converted = db.query(CallRecord).filter(
+        CallRecord.call_time >= month_start, CallRecord.converted == True
+    ).count()
+
+    # Per-brand breakdown
+    brands_kpi = {}
+    for bid in BRANDS:
+        brand_calls = db.query(CallRecord).filter(
+            CallRecord.call_time >= month_start, CallRecord.brand_id == bid
+        ).count()
+        brand_qualified = db.query(CallRecord).filter(
+            CallRecord.call_time >= month_start, CallRecord.brand_id == bid,
+            CallRecord.qualified == True,
+        ).count()
+        brand_converted = db.query(CallRecord).filter(
+            CallRecord.call_time >= month_start, CallRecord.brand_id == bid,
+            CallRecord.converted == True,
+        ).count()
+        brands_kpi[bid] = {
+            "calls": brand_calls,
+            "qualified": brand_qualified,
+            "converted": brand_converted,
+            "conversion_rate": (brand_converted / brand_qualified * 100) if brand_qualified > 0 else 0,
+        }
+
+    db.close()
+    return jsonify({
+        "month": now.strftime("%B %Y"),
+        "goal_calls": 60,
+        "goal_conversion": 10.0,
+        "total_calls": total_calls,
+        "qualified_calls": qualified,
+        "converted": converted,
+        "conversion_rate": (converted / qualified * 100) if qualified > 0 else 0,
+        "progress_pct": min(100, int(qualified / 60 * 100)),
+        "brands": brands_kpi,
+    })
+
+
+@app.route("/api/tokens/update", methods=["POST"])
+def api_update_token():
+    """Update an OAuth token from the dashboard settings page."""
+    data = request.get_json()
+    brand_id = data.get("brand_id")
+    platform = data.get("platform")
+    access_token = data.get("access_token")
+    page_id = data.get("page_id")
+
+    if not brand_id or not platform:
+        return jsonify({"error": "brand_id and platform required"}), 400
+
+    db = get_db()
+    token = db.query(OAuthToken).filter_by(brand_id=brand_id, platform=platform).first()
+    if not token:
+        db.close()
+        return jsonify({"error": "Token not found"}), 404
+
+    if access_token:
+        token.access_token = access_token
+    if page_id:
+        token.page_id = page_id
+    token.expires_at = datetime.utcnow() + timedelta(days=60)
+
+    db.commit()
+    db.close()
+    return jsonify({"status": "updated", "brand_id": brand_id, "platform": platform})
 
 
 # -- Template Filters ---------------------------------------------------------

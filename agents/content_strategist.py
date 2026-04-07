@@ -33,6 +33,9 @@ class ContentStrategist(BaseAgent):
 
         return {"posts_created": total_created}
 
+    # Platforms to generate calendars for
+    PLATFORMS = ["facebook", "instagram", "tiktok", "linkedin"]
+
     def _generate_calendar(self, brand_id: str) -> int:
         brand_context = self.load_brand_context(brand_id)
         if not brand_context:
@@ -56,42 +59,48 @@ class ContentStrategist(BaseAgent):
             return 0
 
         last_month_metrics = self._get_last_month_metrics(db, brand_id)
-
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        prompt = self._build_prompt(brand_context, month_name, last_month_metrics, brand_id)
+        total_count = 0
 
-        self.log(f"Calling Claude API for {month_name} calendar...")
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=8000,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        # Generate one platform at a time to avoid JSON truncation
+        for platform in self.PLATFORMS:
+            self.log(f"Calling Claude API for {month_name} {platform} calendar...")
+            prompt = self._build_prompt(
+                brand_context, month_name, last_month_metrics, brand_id, platform
+            )
 
-        calendar_json = self._parse_response(response.content[0].text)
-        count = 0
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=8000,
+                messages=[{"role": "user", "content": prompt}],
+            )
 
-        for entry in calendar_json:
-            db.add(CalendarEntry(
-                brand_id=brand_id,
-                month=month_str,
-                week=entry.get("week", 1),
-                day=entry.get("day", "Mon"),
-                platform=entry.get("platform", "instagram"),
-                pillar=entry.get("pillar", ""),
-                format=entry.get("format", "single_image"),
-                topic=entry.get("topic", ""),
-                angle=entry.get("angle", ""),
-                visual_direction=entry.get("visual_direction", ""),
-                awareness_level=entry.get("awareness_level", "mof"),
-                persona_target=entry.get("persona_target", ""),
-                objective=entry.get("objective", "engagement"),
-                notes=entry.get("notes", ""),
-            ))
-            count += 1
+            calendar_json = self._parse_response(response.content[0].text)
+
+            for entry in calendar_json:
+                db.add(CalendarEntry(
+                    brand_id=brand_id,
+                    month=month_str,
+                    week=entry.get("week", 1),
+                    day=entry.get("day", "Mon"),
+                    platform=entry.get("platform", platform),
+                    pillar=entry.get("pillar", ""),
+                    format=entry.get("format", "single_image"),
+                    topic=entry.get("topic", ""),
+                    angle=entry.get("angle", ""),
+                    visual_direction=entry.get("visual_direction", ""),
+                    awareness_level=entry.get("awareness_level", "mof"),
+                    persona_target=entry.get("persona_target", ""),
+                    objective=entry.get("objective", "engagement"),
+                    notes=entry.get("notes", ""),
+                ))
+                total_count += 1
+
+            self.log(f"  {platform}: {len(calendar_json)} entries")
 
         db.commit()
         db.close()
-        return count
+        return total_count
 
     def _get_last_month_metrics(self, db, brand_id: str) -> str:
         metrics = (
@@ -113,20 +122,19 @@ class ContentStrategist(BaseAgent):
             )
         return "\n".join(lines)
 
-    def _build_prompt(self, brand_context: str, month_name: str, metrics: str, brand_id: str) -> str:
+    def _build_prompt(self, brand_context: str, month_name: str, metrics: str, brand_id: str, platform: str = "facebook") -> str:
         phones = BRANDS[brand_id]["phones"]
-        phone_info = "\n".join(f"  {p}: {n}" for p, n in phones.items())
+        tracking_phone = phones.get(platform, phones.get("facebook", ""))
 
         return f"""You are a Social Media Content Strategist for a treatment center.
 
-Generate a content calendar for {month_name} across 4 platforms: Facebook, Instagram, TikTok, LinkedIn.
-7 posts per week per platform (28 total per week, ~112 per month).
+Generate a content calendar for {month_name} for {platform.upper()} ONLY.
+7 posts per week (28 total for the month).
 
 BRAND CONTEXT:
 {brand_context[:4000]}
 
-PLATFORM PHONE NUMBERS (use correct number per platform):
-{phone_info}
+TRACKING PHONE NUMBER for {platform}: {tracking_phone}
 
 PERFORMANCE DATA:
 {metrics}
@@ -134,7 +142,7 @@ PERFORMANCE DATA:
 Return ONLY a JSON array of objects. Each object must have:
 - week (1-4)
 - day (Mon/Tue/Wed/Thu/Fri/Sat/Sun)
-- platform (facebook/instagram/tiktok/linkedin)
+- platform ("{platform}")
 - pillar (e.g., "persona_pain_points", "objection_handling", "service_cta", "recovery_education", "trust_proof", "family_loved_ones", "motivational", "community_events")
 - format (single_image/carousel/reel/video/text_post/link_post/document)
 - topic (specific, not vague)
@@ -147,7 +155,7 @@ Return ONLY a JSON array of objects. Each object must have:
 
 Content mix: 40% ToF, 40% MoF, 20% BoF.
 Every post must have a CTA (soft for ToF, direct for BoF).
-Return ONLY valid JSON — no markdown, no explanation."""
+Return ONLY valid JSON array — no markdown fences, no explanation."""
 
     def _parse_response(self, text: str) -> list[dict]:
         text = text.strip()

@@ -1,4 +1,4 @@
-"""Application configuration."""
+"""Application configuration — cloud-ready."""
 from __future__ import annotations
 
 import os
@@ -9,14 +9,25 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent
 load_dotenv(PROJECT_ROOT / ".env", override=True)
 
-DB_PATH = PROJECT_ROOT / "db" / "social_media.db"
-CONTEXT_ROOT = PROJECT_ROOT.parent  # techn/ directory
+# Database: PostgreSQL in production, SQLite fallback for local dev
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+if not DATABASE_URL:
+    DB_PATH = PROJECT_ROOT / "db" / "social_media.db"
+    DATABASE_URL = f"sqlite:///{DB_PATH}"
+elif DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+CONTEXT_ROOT = PROJECT_ROOT.parent  # local dev only
 
 FLASK_SECRET = os.getenv("FLASK_SECRET", "dev-secret-change-in-production")
-FLASK_DEBUG = os.getenv("FLASK_DEBUG", "1") == "1"
-PORT = 5001
+FLASK_DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
+PORT = int(os.getenv("PORT", "5001"))
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+# Canva API for image generation (Creative Director)
+CANVA_API_TOKEN = os.getenv("CANVA_API_TOKEN", "")
+CANVA_BRAND_KIT_ID = os.getenv("CANVA_BRAND_KIT_ID", "")
 
 # Brand configurations
 BRANDS = {

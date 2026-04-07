@@ -5,8 +5,10 @@ from agents.creative_director import CreativeDirector
 from agents.brand_reviewer import BrandReviewer
 from agents.publisher import Publisher
 from agents.performance_analyst import PerformanceAnalyst
+from agents.token_manager import TokenManager
 
 ALL_AGENTS = {
+    "token_manager": TokenManager,
     "content_strategist": ContentStrategist,
     "caption_writer": CaptionWriter,
     "creative_director": CreativeDirector,
@@ -16,10 +18,11 @@ ALL_AGENTS = {
 }
 
 AGENT_DISPLAY = {
-    "content_strategist": {"name": "Content Strategist", "icon": "📅", "desc": "Monthly calendar generation"},
-    "caption_writer": {"name": "Caption Writer", "icon": "✍️", "desc": "Daily caption writing"},
-    "creative_director": {"name": "Creative Director", "icon": "🎨", "desc": "Visual direction + image prompts"},
-    "brand_reviewer": {"name": "Brand Reviewer", "icon": "✅", "desc": "QA before publish"},
-    "publisher": {"name": "Publisher", "icon": "📤", "desc": "API publishing to platforms"},
-    "performance_analyst": {"name": "Performance Analyst", "icon": "📊", "desc": "Weekly metrics + insights"},
+    "token_manager": {"name": "Token Manager", "icon": "🔑", "desc": "Auto-refreshes expiring API tokens"},
+    "content_strategist": {"name": "Content Strategist", "icon": "📅", "desc": "Monthly content calendar for all platforms"},
+    "caption_writer": {"name": "Caption Writer", "icon": "✍️", "desc": "Daily captions, hooks, CTAs, and hashtags"},
+    "creative_director": {"name": "Creative Director", "icon": "🎨", "desc": "Branded visuals via Canva API"},
+    "brand_reviewer": {"name": "Brand Reviewer", "icon": "✅", "desc": "QA review against brand guidelines"},
+    "publisher": {"name": "Publisher", "icon": "📤", "desc": "Auto-publish to FB, IG, LI, TikTok"},
+    "performance_analyst": {"name": "Performance Analyst", "icon": "📊", "desc": "Weekly metrics, call tracking, KPIs"},
 }

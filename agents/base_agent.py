@@ -5,7 +5,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from db.models import AgentRun, get_db
+from db.models import AgentRun, Brand, get_db
 
 
 class BaseAgent:
@@ -26,14 +26,27 @@ class BaseAgent:
         print(f"[{self.name}] {line}")
 
     def load_brand_context(self, brand_id: str) -> str:
-        """Read brand-style.md for a given brand."""
+        """Load brand context — tries DB first (cloud), then local files (dev)."""
         from config import BRANDS
+
+        # Try DB first (cloud deployment)
+        db = get_db()
+        brand = db.query(Brand).filter_by(id=brand_id).first()
+        if brand and brand.brand_context:
+            context = brand.brand_context
+            db.close()
+            return context
+        db.close()
+
+        # Fallback to local files (dev)
         info = BRANDS.get(brand_id)
         if not info:
             return ""
-        style_path = info["context_dir"] / "brand-style.md"
-        if style_path.exists():
-            return style_path.read_text(encoding="utf-8")
+        context_dir = info.get("context_dir")
+        if context_dir:
+            style_path = Path(context_dir) / "brand-style.md"
+            if style_path.exists():
+                return style_path.read_text(encoding="utf-8")
         return ""
 
     def load_content_calendar(self, brand_id: str) -> str:
@@ -42,9 +55,11 @@ class BaseAgent:
         info = BRANDS.get(brand_id)
         if not info:
             return ""
-        cal_path = info["context_dir"] / "content-calendar.md"
-        if cal_path.exists():
-            return cal_path.read_text(encoding="utf-8")
+        context_dir = info.get("context_dir")
+        if context_dir:
+            cal_path = Path(context_dir) / "content-calendar.md"
+            if cal_path.exists():
+                return cal_path.read_text(encoding="utf-8")
         return ""
 
     def _start_run(self):
