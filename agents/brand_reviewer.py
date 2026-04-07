@@ -9,10 +9,8 @@ from __future__ import annotations
 from datetime import datetime
 import json
 
-import anthropic
-
 from agents.base_agent import BaseAgent
-from config import BRANDS, ANTHROPIC_API_KEY
+from config import BRANDS
 from db.models import Post, get_db
 
 
@@ -46,11 +44,10 @@ class BrandReviewer(BaseAgent):
 
         brand_context = self.load_brand_context(brand_id)
         brand_info = BRANDS[brand_id]
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         approved_count = 0
 
         for post in drafts:
-            result = self._review_single(client, brand_context, brand_info, post)
+            result = self._review_single(brand_context, brand_info, post)
             if result and result.get("approved"):
                 post.status = "approved"
                 post.review_notes = result.get("notes", "Approved by Brand Reviewer")
@@ -68,7 +65,7 @@ class BrandReviewer(BaseAgent):
         self.log(f"Reviewed {len(drafts)} posts for {brand_id}: {approved_count} approved")
         return approved_count
 
-    def _review_single(self, client, brand_context: str, brand_info: dict, post: Post) -> dict | None:
+    def _review_single(self, brand_context: str, brand_info: dict, post: Post) -> dict | None:
         phone = brand_info["phones"].get(post.platform, "")
 
         prompt = f"""You are a brand compliance reviewer for {brand_info['name']}.
@@ -103,12 +100,7 @@ Return JSON:
 Return ONLY valid JSON."""
 
         try:
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=300,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = response.content[0].text.strip()
+            text = self.call_claude(prompt, max_tokens=300).strip()
             if text.startswith("```"):
                 text = text.split("\n", 1)[1] if "\n" in text else text[3:]
                 if text.endswith("```"):

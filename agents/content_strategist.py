@@ -10,10 +10,8 @@ from datetime import datetime, timedelta
 import calendar as cal_mod
 import json
 
-import anthropic
-
 from agents.base_agent import BaseAgent
-from config import BRANDS, ANTHROPIC_API_KEY
+from config import BRANDS
 from db.models import CalendarEntry, Metric, get_db
 
 
@@ -59,7 +57,6 @@ class ContentStrategist(BaseAgent):
             return 0
 
         last_month_metrics = self._get_last_month_metrics(db, brand_id)
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         total_count = 0
 
         # Generate one platform at a time to avoid JSON truncation
@@ -69,13 +66,8 @@ class ContentStrategist(BaseAgent):
                 brand_context, month_name, last_month_metrics, brand_id, platform
             )
 
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=8000,
-                messages=[{"role": "user", "content": prompt}],
-            )
-
-            calendar_json = self._parse_response(response.content[0].text)
+            response_text = self.call_claude(prompt, max_tokens=8000)
+            calendar_json = self._parse_response(response_text)
 
             for entry in calendar_json:
                 db.add(CalendarEntry(

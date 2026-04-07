@@ -1,10 +1,14 @@
 """Base class for all Social Media Team agents."""
 from __future__ import annotations
 
+import time
 import traceback
 from datetime import datetime
 from pathlib import Path
 
+import anthropic
+
+from config import ANTHROPIC_API_KEY
 from db.models import AgentRun, Brand, get_db
 
 
@@ -61,6 +65,34 @@ class BaseAgent:
             if cal_path.exists():
                 return cal_path.read_text(encoding="utf-8")
         return ""
+
+    def call_claude(self, prompt: str, model: str = "claude-sonnet-4-20250514",
+                    max_tokens: int = 4096, max_retries: int = 5) -> str:
+        """Call Claude API with automatic retry + exponential backoff for rate limits."""
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        for attempt in range(max_retries):
+            try:
+                response = client.messages.create(
+                    model=model,
+                    max_tokens=max_tokens,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                return response.content[0].text
+            except anthropic.RateLimitError as e:
+                wait = min(2 ** attempt * 30, 180)  # 30s, 60s, 120s, 180s, 180s
+                self.log(f"Rate limited (attempt {attempt+1}/{max_retries}), waiting {wait}s...")
+                time.sleep(wait)
+            except anthropic.APIError as e:
+                if attempt < max_retries - 1:
+                    wait = 2 ** attempt * 10
+                    self.log(f"API error (attempt {attempt+1}): {e}, retrying in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    raise
+        raise anthropic.RateLimitError(
+            message="Max retries exceeded for rate limit",
+            response=None, body=None
+        )
 
     def _start_run(self):
         db = get_db()

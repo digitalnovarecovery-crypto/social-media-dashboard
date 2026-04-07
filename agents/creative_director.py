@@ -9,11 +9,10 @@ from __future__ import annotations
 import time
 from datetime import datetime
 
-import anthropic
 import requests
 
 from agents.base_agent import BaseAgent
-from config import BRANDS, ANTHROPIC_API_KEY, CANVA_API_TOKEN, CANVA_BRAND_KIT_ID
+from config import BRANDS, CANVA_API_TOKEN, CANVA_BRAND_KIT_ID
 from db.models import Post, get_db
 
 CANVA_BASE = "https://api.canva.com/rest/v1"
@@ -59,12 +58,11 @@ class CreativeDirector(BaseAgent):
 
         brand_context = self.load_brand_context(brand_id)
         brand_info = BRANDS[brand_id]
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         count = 0
 
         for post in posts:
             # Step 1: Generate design concept via Claude
-            design_query = self._build_design_query(client, brand_info, post)
+            design_query = self._build_design_query(brand_info, post)
             if not design_query:
                 continue
 
@@ -85,7 +83,7 @@ class CreativeDirector(BaseAgent):
         self.log(f"Generated {count} visuals for {brand_id}")
         return count
 
-    def _build_design_query(self, client, brand_info: dict, post: Post) -> str | None:
+    def _build_design_query(self, brand_info: dict, post: Post) -> str | None:
         """Use Claude to create a detailed Canva design query."""
         prompt = f"""You are a creative director for {brand_info['name']}, a treatment center.
 
@@ -111,12 +109,7 @@ Return ONLY a single Canva design query string (2-4 sentences max). No JSON, no 
 Example: "Create a Facebook post with dark blue background and gold accents. Show a misty forest path at sunrise with the headline 'Recovery Starts Here' in bold white text. Include phone number (737) 345-0811 in gold at the bottom."
 """
         try:
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=300,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            return response.content[0].text.strip()
+            return self.call_claude(prompt, max_tokens=300).strip()
         except Exception as e:
             self.log(f"Design query generation failed: {e}")
             return None
