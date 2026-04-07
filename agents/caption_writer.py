@@ -36,11 +36,33 @@ class CaptionWriter(BaseAgent):
         day_name = today.strftime("%a")
         month_str = today.strftime("%Y-%m")
 
+        # Try current month first, then next month if nothing found
         entries = (
             db.query(CalendarEntry)
             .filter_by(brand_id=brand_id, month=month_str, day=day_name)
             .all()
         )
+
+        if not entries:
+            # Check next month's entries for today's day name
+            next_month = (today.replace(day=1) + timedelta(days=32)).strftime("%Y-%m")
+            entries = (
+                db.query(CalendarEntry)
+                .filter_by(brand_id=brand_id, month=next_month, day=day_name)
+                .all()
+            )
+            if entries:
+                self.log(f"Using next month ({next_month}) entries for {brand_id}")
+
+        if not entries:
+            # Fallback: grab any unwritten entries (up to 5 per platform)
+            written_ids = {p.calendar_entry_id for p in db.query(Post).filter_by(brand_id=brand_id).all()}
+            entries = [
+                e for e in db.query(CalendarEntry).filter_by(brand_id=brand_id).all()
+                if e.id not in written_ids
+            ][:25]  # Cap at 25 entries per run
+            if entries:
+                self.log(f"Using {len(entries)} unwritten entries for {brand_id}")
 
         if not entries:
             self.log(f"No calendar entries for {brand_id} on {day_name}")
