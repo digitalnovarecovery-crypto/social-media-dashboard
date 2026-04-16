@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from flask_cors import CORS
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -24,6 +25,7 @@ from agents import ALL_AGENTS, AGENT_DISPLAY
 # -- App setup ----------------------------------------------------------------
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET
+CORS(app)
 
 # -- Scheduler ----------------------------------------------------------------
 scheduler = BackgroundScheduler(daemon=True)
@@ -423,8 +425,12 @@ def api_agent_status():
 @app.route("/api/posts/count")
 def api_post_counts():
     db = get_db()
-    bid = current_brand_id()
+    bid = request.args.get("brand", current_brand_id())
+        if bid not in BRANDS:
+                    db.close()
+                    return jsonify({"error": f"Unknown brand: {bid}"}), 400
     counts = {
+                "brand": bid,
         "draft": db.query(Post).filter_by(brand_id=bid, status="draft").count(),
         "approved": db.query(Post).filter_by(brand_id=bid, status="approved").count(),
         "scheduled": db.query(Post).filter_by(brand_id=bid, status="scheduled").count(),
