@@ -1,4 +1,5 @@
 flask>=3.0
+flask-cors>=4.0
 sqlalchemy>=2.0
 apscheduler>=3.10
 anthropic>=0.40
