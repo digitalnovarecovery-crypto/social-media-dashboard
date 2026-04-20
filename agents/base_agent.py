@@ -42,15 +42,16 @@ class BaseAgent:
             return context
         db.close()
 
-        # Fallback to local files (dev)
+        # Fallback to local files (dev) or in-repo files (cloud)
         info = BRANDS.get(brand_id)
         if not info:
             return ""
-        context_dir = info.get("context_dir")
-        if context_dir:
-            style_path = Path(context_dir) / "brand-style.md"
-            if style_path.exists():
-                return style_path.read_text(encoding="utf-8")
+        for dir_key in ("context_dir", "context_dir_fallback"):
+            context_dir = info.get(dir_key)
+            if context_dir:
+                style_path = Path(context_dir) / "brand-style.md"
+                if style_path.exists():
+                    return style_path.read_text(encoding="utf-8")
         return ""
 
     def load_content_calendar(self, brand_id: str) -> str:

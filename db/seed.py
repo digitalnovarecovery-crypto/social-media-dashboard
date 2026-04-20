@@ -37,20 +37,29 @@ TOKEN_MAP = {
 
 
 def _load_brand_context(brand_id: str) -> str:
-    """Load brand context from local files (for initial seed)."""
+    """Load brand context from local files or in-repo fallback."""
     info = BRANDS.get(brand_id)
     if not info:
         return ""
-    context_dir = info.get("context_dir")
-    if not context_dir:
-        return ""
+
+    # Try primary context_dir first (local dev), then fallback (in-repo for cloud)
+    dirs_to_try = []
+    if info.get("context_dir"):
+        dirs_to_try.append(Path(info["context_dir"]))
+    if info.get("context_dir_fallback"):
+        dirs_to_try.append(Path(info["context_dir_fallback"]))
 
     context_parts = []
-    for filename in ["brand-style.md", "social-strategy.md", "content-calendar.md"]:
-        filepath = Path(context_dir) / filename
-        if filepath.exists():
-            content = filepath.read_text(encoding="utf-8")
-            context_parts.append(f"# {filename}\n\n{content}")
+    for context_dir in dirs_to_try:
+        if not context_dir.exists():
+            continue
+        for filename in ["brand-style.md", "social-strategy.md", "content-calendar.md"]:
+            filepath = context_dir / filename
+            if filepath.exists():
+                content = filepath.read_text(encoding="utf-8")
+                context_parts.append(f"# {filename}\n\n{content}")
+        if context_parts:
+            break  # Found files in this directory, don't check fallback
 
     return "\n\n---\n\n".join(context_parts)
 
@@ -101,12 +110,12 @@ def seed():
                     access_token=access_token,
                 ))
             else:
-                # Update tokens if env has newer values
-                if page_id and not existing_token.page_id:
+                # Always update tokens from env vars (overwrite stale values)
+                if page_id:
                     existing_token.page_id = page_id
-                if access_token and not existing_token.access_token:
+                if access_token:
                     existing_token.access_token = access_token
-                if phone and not existing_token.tracking_phone:
+                if phone:
                     existing_token.tracking_phone = phone
 
     db.commit()

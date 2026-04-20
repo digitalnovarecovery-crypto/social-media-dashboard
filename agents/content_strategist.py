@@ -25,24 +25,30 @@ class ContentStrategist(BaseAgent):
 
         for brand_id in brands:
             self.log(f"Generating content calendar for {brand_id}")
-            count = self._generate_calendar(brand_id)
-            total_created += count
-            self.log(f"Created {count} calendar entries for {brand_id}")
+            # Generate for current month first (if missing), then next month
+            count_current = self._generate_calendar(brand_id, use_current_month=True)
+            count_next = self._generate_calendar(brand_id, use_current_month=False)
+            total = count_current + count_next
+            total_created += total
+            self.log(f"Created {total} calendar entries for {brand_id} (current={count_current}, next={count_next})")
 
         return {"posts_created": total_created}
 
     # Platforms to generate calendars for
     PLATFORMS = ["facebook", "instagram", "tiktok", "linkedin"]
 
-    def _generate_calendar(self, brand_id: str) -> int:
+    def _generate_calendar(self, brand_id: str, use_current_month: bool = False) -> int:
         brand_context = self.load_brand_context(brand_id)
         if not brand_context:
             self.log(f"No brand-style.md found for {brand_id}, skipping")
             return 0
 
         now = datetime.now()
-        target_month = now.replace(day=1) + timedelta(days=32)
-        target_month = target_month.replace(day=1)
+        if use_current_month:
+            target_month = now.replace(day=1)
+        else:
+            target_month = now.replace(day=1) + timedelta(days=32)
+            target_month = target_month.replace(day=1)
         month_str = target_month.strftime("%Y-%m")
         month_name = target_month.strftime("%B %Y")
 

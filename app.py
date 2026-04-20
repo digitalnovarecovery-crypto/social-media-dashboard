@@ -551,13 +551,9 @@ def status_color(status):
 def startup():
     """Initialize DB, seed, and start scheduler."""
     init_db()
-    db = get_db()
-    if db.query(Brand).count() == 0:
-        db.close()
-        from db.seed import seed
-        seed()
-    else:
-        db.close()
+    # Always run seed to update tokens and brand context from env vars / files
+    from db.seed import seed
+    seed()
     setup_scheduler()
     print(f"\n  Social Media Team Dashboard — 6 agents scheduled and running\n")
 

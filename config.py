@@ -18,6 +18,7 @@ elif DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 CONTEXT_ROOT = PROJECT_ROOT.parent  # local dev only
+BRAND_DATA_DIR = PROJECT_ROOT / "brand_data"  # in-repo brand context (for cloud)
 
 FLASK_SECRET = os.getenv("FLASK_SECRET", "dev-secret-change-in-production")
 FLASK_DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
@@ -37,6 +38,7 @@ BRANDS = {
         "color": "#1d2a3b",
         "accent": "#efc732",
         "context_dir": CONTEXT_ROOT / "nova-recovery-center" / "context",
+        "context_dir_fallback": BRAND_DATA_DIR / "nova",
         "phones": {
             "facebook": "(737) 345-0811",
             "instagram": "(512) 387-9914",
@@ -51,6 +53,7 @@ BRANDS = {
         "color": "#1b1814",
         "accent": "#f6ea2c",
         "context_dir": CONTEXT_ROOT / "briarwood-detox-center" / "context",
+        "context_dir_fallback": BRAND_DATA_DIR / "briarwood",
         "phones": {
             "facebook": "(512) 641-5513",
             "instagram": "(737) 317-4390",
@@ -65,6 +68,7 @@ BRANDS = {
         "color": "#2d6a2e",
         "accent": "#fee21d",
         "context_dir": CONTEXT_ROOT / "eudaimonia-sober-living" / "context",
+        "context_dir_fallback": BRAND_DATA_DIR / "eudaimonia",
         "phones": {
             "facebook": "(512) 985-2139",
             "instagram": "(737) 378-8653",
