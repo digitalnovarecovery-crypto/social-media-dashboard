@@ -426,11 +426,11 @@ def api_agent_status():
 def api_post_counts():
     db = get_db()
     bid = request.args.get("brand", current_brand_id())
-        if bid not in BRANDS:
-                    db.close()
-                    return jsonify({"error": f"Unknown brand: {bid}"}), 400
+    if bid not in BRANDS:
+        db.close()
+        return jsonify({"error": f"Unknown brand: {bid}"}), 400
     counts = {
-                "brand": bid,
+        "brand": bid,
         "draft": db.query(Post).filter_by(brand_id=bid, status="draft").count(),
         "approved": db.query(Post).filter_by(brand_id=bid, status="approved").count(),
         "scheduled": db.query(Post).filter_by(brand_id=bid, status="scheduled").count(),

@@ -3,7 +3,12 @@
 {% block content %}
 <div class="flex items-center justify-between mb-6">
     <h2 class="text-2xl font-bold text-gray-800">Posts</h2>
-    <div class="flex gap-2">
+    <div class="flex gap-2 items-center">
+        <!-- View toggle -->
+        <div class="flex rounded-lg border border-gray-200 overflow-hidden mr-2">
+            <button onclick="setView('list')" id="btn-list" class="px-3 py-1.5 text-xs font-medium bg-gray-800 text-white">List</button>
+            <button onclick="setView('grid')" id="btn-grid" class="px-3 py-1.5 text-xs font-medium bg-white text-gray-600 hover:bg-gray-50">Grid</button>
+        </div>
         <form method="POST" action="/posts/bulk-approve" id="bulk-form">
             <button type="submit" class="px-3 py-1.5 rounded-md text-sm text-white font-medium" style="background:{{ accent_color }}">
                 Bulk Approve Selected
@@ -23,13 +28,14 @@
     <span class="text-gray-300 mx-1">|</span>
     <a href="/posts?status={{ status_filter }}&platform=all"
        class="px-3 py-1 rounded-full text-xs font-medium {% if platform_filter == 'all' %}bg-gray-800 text-white{% else %}bg-gray-100 text-gray-600{% endif %}">All Platforms</a>
-    {% for p in ['facebook', 'instagram', 'tiktok', 'linkedin'] %}
+    {% for p in ['facebook', 'instagram', 'tiktok', 'linkedin', 'youtube'] %}
     <a href="/posts?status={{ status_filter }}&platform={{ p }}"
        class="px-3 py-1 rounded-full text-xs font-medium {% if platform_filter == p %}bg-gray-800 text-white{% else %}bg-gray-100 text-gray-600{% endif %}">{{ p | capitalize }}</a>
     {% endfor %}
 </div>
 
-<!-- Posts Table -->
+<!-- ==================== LIST VIEW ==================== -->
+<div id="view-list">
 <div class="bg-white rounded-xl shadow-sm border border-gray-200">
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -39,7 +45,8 @@
                         <input type="checkbox" onclick="toggleAll(this)" class="rounded">
                     </th>
                     <th class="px-4 py-3 text-left">Platform</th>
-                    <th class="px-4 py-3 text-left">Caption Preview</th>
+                    <th class="px-4 py-3 text-left w-16">Preview</th>
+                    <th class="px-4 py-3 text-left">Caption</th>
                     <th class="px-4 py-3 text-left">Status</th>
                     <th class="px-4 py-3 text-left">Scheduled</th>
                     <th class="px-4 py-3 text-left">Actions</th>
@@ -52,10 +59,20 @@
                         <input type="checkbox" name="post_ids" value="{{ post.id }}" form="bulk-form" class="rounded post-checkbox">
                     </td>
                     <td class="px-4 py-3">
-                        {% if post.platform == 'facebook' %}<span class="text-blue-600 font-bold">FB</span>
-                        {% elif post.platform == 'instagram' %}<span class="text-pink-500 font-bold">IG</span>
-                        {% elif post.platform == 'tiktok' %}<span class="font-bold">TT</span>
-                        {% elif post.platform == 'linkedin' %}<span class="text-blue-700 font-bold">LI</span>
+                        {% if post.platform == 'facebook' %}<span class="inline-flex items-center gap-1 text-blue-600 font-bold text-xs"><span class="w-2 h-2 rounded-full bg-blue-600"></span>FB</span>
+                        {% elif post.platform == 'instagram' %}<span class="inline-flex items-center gap-1 text-pink-500 font-bold text-xs"><span class="w-2 h-2 rounded-full bg-gradient-to-br from-purple-600 to-pink-500"></span>IG</span>
+                        {% elif post.platform == 'tiktok' %}<span class="inline-flex items-center gap-1 font-bold text-xs"><span class="w-2 h-2 rounded-full bg-black"></span>TT</span>
+                        {% elif post.platform == 'linkedin' %}<span class="inline-flex items-center gap-1 text-blue-700 font-bold text-xs"><span class="w-2 h-2 rounded-full bg-blue-700"></span>LI</span>
+                        {% elif post.platform == 'youtube' %}<span class="inline-flex items-center gap-1 text-red-600 font-bold text-xs"><span class="w-2 h-2 rounded-full bg-red-600"></span>YT</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3">
+                        {% if post.image_url %}
+                        <img src="{{ post.image_url }}" class="w-10 h-10 rounded object-cover" alt="">
+                        {% else %}
+                        <div class="w-10 h-10 rounded bg-gray-100 flex items-center justify-center">
+                            <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        </div>
                         {% endif %}
                     </td>
                     <td class="px-4 py-3 max-w-md">
@@ -82,13 +99,13 @@
                                 <button class="px-2 py-1 text-xs rounded bg-green-50 text-green-700 hover:bg-green-100">Approve</button>
                             </form>
                             {% endif %}
-                            <a href="/posts/{{ post.id }}" class="px-2 py-1 text-xs rounded bg-gray-50 text-gray-600 hover:bg-gray-100">View</a>
+                            <a href="/posts/{{ post.id }}" class="px-2 py-1 text-xs rounded bg-gray-50 text-gray-600 hover:bg-gray-100">Preview</a>
                         </div>
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" class="px-4 py-12 text-center text-gray-400">
+                    <td colspan="7" class="px-4 py-12 text-center text-gray-400">
                         No posts found. Run the Caption Writer agent to generate posts.
                     </td>
                 </tr>
@@ -97,10 +114,128 @@
         </table>
     </div>
 </div>
+</div>
+
+<!-- ==================== GRID VIEW (Card Previews) ==================== -->
+<div id="view-grid" class="hidden">
+    {% if posts %}
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        {% for post in posts %}
+        <a href="/posts/{{ post.id }}" class="block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow group">
+            <!-- Card Image / Platform Header -->
+            {% if post.platform == 'instagram' %}
+            <div class="relative">
+                {% if post.image_url %}
+                <img src="{{ post.image_url }}" class="w-full aspect-square object-cover" alt="">
+                {% else %}
+                <div class="w-full aspect-square bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center">
+                    <span class="text-4xl opacity-30">📷</span>
+                </div>
+                {% endif %}
+                <div class="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gradient-to-r from-purple-600 to-pink-500 text-white">Instagram</div>
+            </div>
+            {% elif post.platform == 'tiktok' %}
+            <div class="relative">
+                {% if post.image_url %}
+                <img src="{{ post.image_url }}" class="w-full aspect-[9/12] object-cover" alt="">
+                {% else %}
+                <div class="w-full aspect-[9/12] bg-gradient-to-b from-gray-800 to-black flex items-center justify-center">
+                    <span class="text-4xl opacity-30">🎵</span>
+                </div>
+                {% endif %}
+                <div class="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-black text-white">TikTok</div>
+            </div>
+            {% elif post.platform == 'youtube' %}
+            <div class="relative">
+                {% if post.image_url %}
+                <img src="{{ post.image_url }}" class="w-full aspect-video object-cover" alt="">
+                {% else %}
+                <div class="w-full aspect-video bg-gray-900 flex items-center justify-center">
+                    <div class="w-12 h-12 rounded-full bg-red-600/80 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+                </div>
+                {% endif %}
+                <div class="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white">YouTube</div>
+            </div>
+            {% else %}
+            <!-- Facebook / LinkedIn -->
+            <div class="relative">
+                {% if post.image_url %}
+                <img src="{{ post.image_url }}" class="w-full aspect-[16/10] object-cover" alt="">
+                {% else %}
+                <div class="w-full h-3 {% if post.platform == 'linkedin' %}bg-blue-700{% else %}bg-blue-600{% endif %}"></div>
+                {% endif %}
+                <div class="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold
+                    {% if post.platform == 'linkedin' %}bg-blue-700{% else %}bg-blue-600{% endif %} text-white">
+                    {{ post.platform | capitalize }}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Card Body -->
+            <div class="p-4">
+                <!-- Brand + Status row -->
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-medium text-gray-500 capitalize">{{ post.brand_id }}</span>
+                    {% set s = post.status %}
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-medium
+                        {% if s == 'published' %}bg-green-100 text-green-700
+                        {% elif s == 'approved' %}bg-blue-100 text-blue-700
+                        {% elif s == 'scheduled' %}bg-amber-100 text-amber-700
+                        {% elif s == 'draft' %}bg-gray-100 text-gray-600
+                        {% elif s == 'failed' %}bg-red-100 text-red-700
+                        {% elif s == 'needs_revision' %}bg-orange-100 text-orange-700
+                        {% endif %}">{{ s | replace('_', ' ') | title }}</span>
+                </div>
+                <!-- Caption preview -->
+                <p class="text-sm text-gray-800 line-clamp-3 leading-relaxed">{{ (post.caption or 'No caption yet')[:150] }}</p>
+                {% if post.hashtags %}
+                <p class="text-xs text-blue-600 mt-2 truncate">{{ post.hashtags }}</p>
+                {% endif %}
+                <!-- Footer -->
+                <div class="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+                    <span class="text-[10px] text-gray-400">{{ post.scheduled_time | format_dt }}</span>
+                    <span class="text-xs text-gray-500 group-hover:text-blue-600 transition-colors">View preview &rarr;</span>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 px-4 py-12 text-center text-gray-400">
+        No posts found. Run the Caption Writer agent to generate posts.
+    </div>
+    {% endif %}
+</div>
 
 <script>
 function toggleAll(el) {
     document.querySelectorAll('.post-checkbox').forEach(cb => cb.checked = el.checked);
 }
+
+function setView(view) {
+    const listView = document.getElementById('view-list');
+    const gridView = document.getElementById('view-grid');
+    const btnList = document.getElementById('btn-list');
+    const btnGrid = document.getElementById('btn-grid');
+
+    if (view === 'grid') {
+        listView.classList.add('hidden');
+        gridView.classList.remove('hidden');
+        btnGrid.className = 'px-3 py-1.5 text-xs font-medium bg-gray-800 text-white';
+        btnList.className = 'px-3 py-1.5 text-xs font-medium bg-white text-gray-600 hover:bg-gray-50';
+    } else {
+        gridView.classList.add('hidden');
+        listView.classList.remove('hidden');
+        btnList.className = 'px-3 py-1.5 text-xs font-medium bg-gray-800 text-white';
+        btnGrid.className = 'px-3 py-1.5 text-xs font-medium bg-white text-gray-600 hover:bg-gray-50';
+    }
+    localStorage.setItem('postsView', view);
+}
+
+// Restore saved view preference
+const saved = localStorage.getItem('postsView');
+if (saved === 'grid') setView('grid');
 </script>
 {% endblock %}
