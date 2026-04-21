@@ -683,6 +683,60 @@ def api_update_token():
     return jsonify({"status": "updated", "brand_id": brand_id, "platform": platform})
 
 
+@app.route("/api/posts/need-visuals")
+def api_posts_need_visuals():
+    """Return posts that need Canva-designed visuals (no canva_design_id)."""
+    db = get_db()
+    brand_id = request.args.get("brand")
+
+    query = db.query(Post).filter(
+        Post.status.in_(["draft", "approved", "scheduled"]),
+        (Post.canva_design_id == None) | (Post.canva_design_id == ""),
+    )
+    if brand_id:
+        query = query.filter_by(brand_id=brand_id)
+
+    posts = query.order_by(Post.id).limit(50).all()
+    result = []
+    for p in posts:
+        result.append({
+            "id": p.id,
+            "brand_id": p.brand_id,
+            "platform": p.platform,
+            "caption": (p.caption or "")[:300],
+            "image_prompt": p.image_prompt,
+            "status": p.status,
+            "scheduled_time": p.scheduled_time.isoformat() if p.scheduled_time else None,
+        })
+    db.close()
+    return jsonify(result)
+
+
+@app.route("/api/posts/<int:post_id>/update-image", methods=["POST"])
+def api_update_post_image(post_id):
+    """Update a post's image_url and canva_design_id after Canva generation."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    db = get_db()
+    post = db.query(Post).get(post_id)
+    if not post:
+        db.close()
+        return jsonify({"error": "Post not found"}), 404
+
+    if data.get("image_url"):
+        post.image_url = data["image_url"]
+    if data.get("canva_design_id"):
+        post.canva_design_id = data["canva_design_id"]
+    if data.get("image_prompt"):
+        post.image_prompt = data["image_prompt"]
+
+    db.commit()
+    db.close()
+    return jsonify({"status": "updated", "post_id": post_id})
+
+
 # -- Template Filters ---------------------------------------------------------
 
 @app.template_filter("format_dt")
