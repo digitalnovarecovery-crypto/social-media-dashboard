@@ -1,8 +1,9 @@
 [phases.setup]
-nixPkgs = ["python312"]
+nixPkgs = ["python312", "dejavu_fonts", "liberation_ttf", "freetype"]
+aptPkgs = ["fonts-dejavu-core", "fonts-liberation", "fontconfig"]
 
 [phases.install]
-cmds = ["pip install -r requirements.txt"]
+cmds = ["pip install -r requirements.txt", "fc-cache -f -v || true"]
 
 [start]
 cmd = "gunicorn app:app --bind 0.0.0.0:${PORT:-5001} --workers 2 --threads 4"

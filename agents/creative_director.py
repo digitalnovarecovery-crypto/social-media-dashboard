@@ -44,8 +44,13 @@ POST_TYPES = ("quote", "bold_headline", "cta", "service_list", "motivational")
 IMAGES_DIR = PROJECT_ROOT / "static" / "images"
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
-# Font paths in preference order (Poppins Bold is ideal for social media)
+# Bundled font paths (guaranteed to exist in the repo)
+_BUNDLED_BOLD = str(PROJECT_ROOT / "static" / "fonts" / "DejaVuSans-Bold.ttf")
+_BUNDLED_REGULAR = str(PROJECT_ROOT / "static" / "fonts" / "DejaVuSans.ttf")
+
+# Font paths in preference order — bundled fonts FIRST for reliability
 _BOLD_FONT_PATHS = [
+    _BUNDLED_BOLD,
     "/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf",
     "/usr/share/fonts/truetype/lato/Lato-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -53,6 +58,7 @@ _BOLD_FONT_PATHS = [
 ]
 
 _REGULAR_FONT_PATHS = [
+    _BUNDLED_REGULAR,
     "/usr/share/fonts/truetype/google-fonts/Poppins-Medium.ttf",
     "/usr/share/fonts/truetype/google-fonts/Poppins-Regular.ttf",
     "/usr/share/fonts/truetype/lato/Lato-Semibold.ttf",
@@ -61,6 +67,7 @@ _REGULAR_FONT_PATHS = [
 ]
 
 _MEDIUM_FONT_PATHS = [
+    _BUNDLED_BOLD,  # Use bold as medium fallback
     "/usr/share/fonts/truetype/google-fonts/Poppins-Medium.ttf",
     "/usr/share/fonts/truetype/lato/Lato-Semibold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
