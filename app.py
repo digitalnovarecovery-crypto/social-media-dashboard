@@ -1,4 +1,4 @@
-"""Social Media Team Dashboard — 6 Autonomous AI Agents
+"""Social Media Team Dashboard — 7 Autonomous AI Agents
 Run: python app.py -> http://localhost:5001
 """
 from __future__ import annotations
