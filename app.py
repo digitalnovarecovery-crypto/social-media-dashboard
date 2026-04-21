@@ -1,38 +1,29 @@
-"""Social Media Team Dashboard — 7 Autonomous AI Agents
+"""Social Media Team Dashboard — 6 Autonomous AI Agents
 Run: python app.py -> http://localhost:5001
 """
 from __future__ import annotations
 
-import base64
-import hashlib
 import json
-import os
-import secrets
 import sys
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from flask_cors import CORS
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import config
 from config import BRANDS, AGENT_SCHEDULES, FLASK_SECRET, FLASK_DEBUG, PORT
-import requests as http_requests
-
 from db.models import (
-    AgentRun, Brand, CallRecord, CalendarEntry, CanvaOAuthToken, Metric,
-    OAuthToken, Post, get_db, init_db,
+    AgentRun, Brand, CallRecord, CalendarEntry, Metric, OAuthToken, Post,
+    get_db, init_db,
 )
 from agents import ALL_AGENTS, AGENT_DISPLAY
 
 # -- App setup ----------------------------------------------------------------
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET
-CORS(app)
 
 # -- Scheduler ----------------------------------------------------------------
 scheduler = BackgroundScheduler(daemon=True)
@@ -76,13 +67,6 @@ def setup_scheduler():
         args=["creative_director"],
         hour=7, minute=0,
         id="creative_director", replace_existing=True,
-    )
-    # Video Generator: daily at 7:30am (after Creative Director)
-    scheduler.add_job(
-        run_agent_job, "cron",
-        args=["video_generator"],
-        hour=7, minute=30,
-        id="video_generator", replace_existing=True,
     )
     # Brand Reviewer: daily
     scheduler.add_job(
@@ -415,161 +399,6 @@ def settings_page():
     return render_template("settings.html", brands=brands, tokens=tokens)
 
 
-# -- Routes: Canva OAuth2 PKCE ------------------------------------------------
-
-CANVA_CLIENT_ID = os.environ.get("CANVA_CLIENT_ID", "OC-AZ2w99K_1Qbw")
-CANVA_CLIENT_SECRET = os.environ.get("CANVA_CLIENT_SECRET", "")
-CANVA_REDIRECT_URI = "https://social-media-dashboard-production-a19f.up.railway.app/oauth/canva/callback"
-CANVA_SCOPES = (
-    "profile:read brandtemplate:content:read design:meta:read asset:write "
-    "design:content:read brandtemplate:content:write design:content:write "
-    "asset:read brandtemplate:meta:read"
-)
-
-
-@app.route("/oauth/canva/start")
-def canva_oauth_start():
-    """Generate PKCE code_verifier + code_challenge, redirect to Canva authorization."""
-    # Generate code_verifier (43-128 chars, URL-safe)
-    code_verifier = secrets.token_urlsafe(64)
-    # Generate code_challenge = base64url(sha256(code_verifier))
-    code_challenge = (
-        base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
-        .rstrip(b"=")
-        .decode()
-    )
-    # Store verifier in session for the callback
-    session["canva_code_verifier"] = code_verifier
-
-    # Generate state for CSRF protection
-    state = secrets.token_urlsafe(32)
-    session["canva_oauth_state"] = state
-
-    auth_url = (
-        "https://www.canva.com/api/oauth/authorize"
-        f"?response_type=code"
-        f"&client_id={CANVA_CLIENT_ID}"
-        f"&redirect_uri={CANVA_REDIRECT_URI}"
-        f"&scope={CANVA_SCOPES}"
-        f"&code_challenge={code_challenge}"
-        f"&code_challenge_method=S256"
-        f"&state={state}"
-    )
-    return redirect(auth_url)
-
-
-@app.route("/oauth/canva/callback")
-def canva_oauth_callback():
-    """Receive auth code from Canva, exchange for tokens, store in DB."""
-    error = request.args.get("error")
-    if error:
-        flash(f"Canva OAuth error: {error} - {request.args.get('error_description', '')}", "error")
-        return redirect(url_for("settings_page"))
-
-    code = request.args.get("code")
-    state = request.args.get("state")
-
-    # Validate state
-    if not state or state != session.pop("canva_oauth_state", None):
-        flash("Invalid OAuth state — possible CSRF attack", "error")
-        return redirect(url_for("settings_page"))
-
-    code_verifier = session.pop("canva_code_verifier", None)
-    if not code or not code_verifier:
-        flash("Missing authorization code or code verifier", "error")
-        return redirect(url_for("settings_page"))
-
-    # Exchange code for tokens
-    if not CANVA_CLIENT_SECRET:
-        flash("CANVA_CLIENT_SECRET not configured in environment", "error")
-        return redirect(url_for("settings_page"))
-
-    basic_auth = base64.b64encode(f"{CANVA_CLIENT_ID}:{CANVA_CLIENT_SECRET}".encode()).decode()
-
-    try:
-        resp = http_requests.post(
-            "https://api.canva.com/rest/v1/oauth/token",
-            headers={
-                "Authorization": f"Basic {basic_auth}",
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            data={
-                "grant_type": "authorization_code",
-                "code_verifier": code_verifier,
-                "code": code,
-                "redirect_uri": CANVA_REDIRECT_URI,
-            },
-            timeout=30,
-        )
-
-        if not resp.ok:
-            flash(f"Token exchange failed: {resp.status_code} — {resp.text[:300]}", "error")
-            return redirect(url_for("settings_page"))
-
-        token_data = resp.json()
-        access_token = token_data.get("access_token")
-        refresh_token = token_data.get("refresh_token")
-
-        if not access_token:
-            flash("No access_token in Canva response", "error")
-            return redirect(url_for("settings_page"))
-
-        # Store in database
-        db = get_db()
-        # Upsert: delete old tokens, insert new one
-        db.query(CanvaOAuthToken).delete()
-        new_token = CanvaOAuthToken(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            token_type=token_data.get("token_type", "Bearer"),
-            expires_in=token_data.get("expires_in"),
-            scope=token_data.get("scope", ""),
-        )
-        db.add(new_token)
-        db.commit()
-        db.close()
-
-        # Update runtime config so Creative Director picks it up immediately
-        config.CANVA_API_TOKEN = access_token
-
-        flash("Canva connected successfully! Token stored.", "success")
-
-    except Exception as e:
-        flash(f"Canva token exchange error: {e}", "error")
-
-    return redirect(url_for("settings_page"))
-
-
-@app.route("/oauth/canva/status")
-def canva_oauth_status():
-    """Check whether a valid Canva token exists."""
-    db = get_db()
-    token = db.query(CanvaOAuthToken).order_by(CanvaOAuthToken.updated_at.desc()).first()
-    db.close()
-
-    if token:
-        # Check if token might be expired
-        age_seconds = (datetime.utcnow() - (token.updated_at or token.created_at)).total_seconds()
-        expires_in = token.expires_in or 3600
-        is_expired = age_seconds > expires_in
-
-        return jsonify({
-            "connected": True,
-            "expired": is_expired,
-            "scope": token.scope,
-            "created_at": token.created_at.isoformat() if token.created_at else None,
-            "updated_at": token.updated_at.isoformat() if token.updated_at else None,
-            "expires_in": token.expires_in,
-            "age_seconds": int(age_seconds),
-            "has_refresh_token": bool(token.refresh_token),
-        })
-    else:
-        return jsonify({
-            "connected": False,
-            "message": "No Canva token found. Visit /oauth/canva/start to connect.",
-        })
-
-
 # -- API routes (for AJAX) ----------------------------------------------------
 
 @app.route("/api/agent-status")
@@ -591,51 +420,11 @@ def api_agent_status():
     return jsonify(statuses)
 
 
-@app.route("/api/reset-images", methods=["GET", "POST"])
-def api_reset_images():
-    """Clear all image_url fields so Creative Director can regenerate them."""
-    db = get_db()
-    brand_id = request.args.get("brand")
-    if brand_id and brand_id != "all":
-        count = db.query(Post).filter_by(brand_id=brand_id).filter(Post.image_url != None).update({"image_url": None})
-    else:
-        count = db.query(Post).filter(Post.image_url != None).update({"image_url": None})
-    db.commit()
-    db.close()
-    return jsonify({"reset": count, "brand": brand_id or "all"})
-
-
-@app.route("/api/reset-and-regenerate", methods=["GET", "POST"])
-def api_reset_and_regenerate():
-    """Clear image URLs for a brand and re-run Creative Director."""
-    brand_id = request.args.get("brand", "all")
-    db = get_db()
-    if brand_id and brand_id != "all":
-        count = db.query(Post).filter_by(brand_id=brand_id).filter(Post.image_url != None).update({"image_url": None})
-    else:
-        count = db.query(Post).filter(Post.image_url != None).update({"image_url": None})
-    db.commit()
-    db.close()
-
-    # Run Creative Director in background
-    thread = threading.Thread(
-        target=run_agent_job,
-        args=["creative_director", brand_id if brand_id != "all" else None],
-        daemon=True,
-    )
-    thread.start()
-    return jsonify({"reset": count, "brand": brand_id, "status": "creative_director started"})
-
-
 @app.route("/api/posts/count")
 def api_post_counts():
     db = get_db()
-    bid = request.args.get("brand", current_brand_id())
-    if bid not in BRANDS:
-        db.close()
-        return jsonify({"error": f"Unknown brand: {bid}"}), 400
+    bid = current_brand_id()
     counts = {
-        "brand": bid,
         "draft": db.query(Post).filter_by(brand_id=bid, status="draft").count(),
         "approved": db.query(Post).filter_by(brand_id=bid, status="approved").count(),
         "scheduled": db.query(Post).filter_by(brand_id=bid, status="scheduled").count(),
@@ -726,124 +515,18 @@ def api_update_token():
     return jsonify({"status": "updated", "brand_id": brand_id, "platform": platform})
 
 
-@app.route("/api/posts/need-visuals")
-def api_posts_need_visuals():
-    """Return posts that need Canva-designed visuals (no canva_design_id)."""
+@app.route("/api/reset-images", methods=["POST"])
+def api_reset_images():
+    """Clear image_url on all posts so Creative Director can regenerate them."""
     db = get_db()
     brand_id = request.args.get("brand")
-
-    query = db.query(Post).filter(
-        Post.status.in_(["draft", "approved", "scheduled"]),
-        (Post.canva_design_id == None) | (Post.canva_design_id == ""),
-    )
+    q = db.query(Post).filter(Post.image_url.isnot(None))
     if brand_id:
-        query = query.filter_by(brand_id=brand_id)
-
-    posts = query.order_by(Post.id).limit(50).all()
-    result = []
-    for p in posts:
-        result.append({
-            "id": p.id,
-            "brand_id": p.brand_id,
-            "platform": p.platform,
-            "caption": (p.caption or "")[:300],
-            "image_prompt": p.image_prompt,
-            "status": p.status,
-            "scheduled_time": p.scheduled_time.isoformat() if p.scheduled_time else None,
-        })
-    db.close()
-    return jsonify(result)
-
-
-@app.route("/api/posts/<int:post_id>/update-image", methods=["POST"])
-def api_update_post_image(post_id):
-    """Update a post's image_url and canva_design_id after Canva generation."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-
-    db = get_db()
-    post = db.query(Post).get(post_id)
-    if not post:
-        db.close()
-        return jsonify({"error": "Post not found"}), 404
-
-    if data.get("image_url"):
-        post.image_url = data["image_url"]
-    if data.get("canva_design_id"):
-        post.canva_design_id = data["canva_design_id"]
-    if data.get("image_prompt"):
-        post.image_prompt = data["image_prompt"]
-
+        q = q.filter(Post.brand_id == brand_id)
+    count = q.update({Post.image_url: None})
     db.commit()
     db.close()
-    return jsonify({"status": "updated", "post_id": post_id})
-
-
-# -- Video Generation API endpoints ------------------------------------------
-
-@app.route("/api/posts/need-videos")
-def api_posts_need_videos():
-    """Return posts that need video generation (TikTok/YouTube, no video_url)."""
-    db = get_db()
-    brand_id = request.args.get("brand")
-    query = db.query(Post).filter(
-        Post.status.in_(["draft", "approved", "scheduled"]),
-        Post.platform.in_(["tiktok", "youtube"]),
-        (Post.video_url == None) | (Post.video_url == ""),
-    )
-    if brand_id:
-        query = query.filter_by(brand_id=brand_id)
-    posts = query.order_by(Post.id).limit(50).all()
-    result = []
-    for p in posts:
-        result.append({
-            "id": p.id,
-            "brand_id": p.brand_id,
-            "platform": p.platform,
-            "caption": (p.caption or "")[:300],
-            "status": p.status,
-            "scheduled_time": p.scheduled_time.isoformat() if p.scheduled_time else None,
-        })
-    db.close()
-    return jsonify(result)
-
-
-@app.route("/api/posts/<int:post_id>/update-video", methods=["POST"])
-def api_update_post_video(post_id):
-    """Update a post's video_url after Captions.ai generation."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-    db = get_db()
-    post = db.query(Post).get(post_id)
-    if not post:
-        db.close()
-        return jsonify({"error": "Post not found"}), 404
-    if data.get("video_url"):
-        post.video_url = data["video_url"]
-    db.commit()
-    db.close()
-    return jsonify({"status": "updated", "post_id": post_id})
-
-
-@app.route("/api/captions/credits")
-def api_captions_credits():
-    """Check Captions.ai API credit balance."""
-    import requests as req
-    api_key = os.getenv("CAPTIONS_API_KEY", "")
-    if not api_key:
-        return jsonify({"error": "CAPTIONS_API_KEY not configured"}), 500
-    try:
-        resp = req.post(
-            "https://api.captions.ai/api/creator/list",
-            headers={"x-api-key": api_key, "Content-Type": "application/json"},
-            json={},
-            timeout=15,
-        )
-        return jsonify({"status": resp.status_code, "data": resp.json()})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({"status": "ok", "images_cleared": count})
 
 
 # -- Template Filters ---------------------------------------------------------
@@ -876,26 +559,19 @@ def status_color(status):
 def startup():
     """Initialize DB, seed, and start scheduler."""
     init_db()
-    # Always run seed to update tokens and brand context from env vars / files
-    from db.seed import seed
-    seed()
-
-    # Load Canva OAuth token from DB into runtime config (survives restarts)
-    try:
-        db = get_db()
-        canva_token = db.query(CanvaOAuthToken).order_by(CanvaOAuthToken.updated_at.desc()).first()
-        if canva_token and canva_token.access_token:
-            config.CANVA_API_TOKEN = canva_token.access_token
-            print("  Canva OAuth token loaded from database")
+    db = get_db()
+    if db.query(Brand).count() == 0:
         db.close()
-    except Exception:
-        pass  # Table may not exist yet on first run
-
+        from db.seed import seed
+        seed()
+    else:
+        db.close()
     setup_scheduler()
-    print(f"\n  Social Media Team Dashboard — 7 agents scheduled and running\n")
+    print(f"\n  Social Media Team Dashboard — 6 agents scheduled and running\n")
 
 
 # Run startup on import (for gunicorn) — but only once
+import os
 if os.environ.get("WERKZEUG_RUN_MAIN") != "true" or not FLASK_DEBUG:
     startup()
 
