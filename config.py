@@ -30,9 +30,10 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 CANVA_API_TOKEN = os.getenv("CANVA_API_TOKEN", "")
 CANVA_BRAND_KIT_ID = os.getenv("CANVA_BRAND_KIT_ID", "")
 
-# Captions.ai / Mirage API (AI Twin video generation)
+# Captions.ai / Mirage API (AI Twin video generation for TikTok)
 CAPTIONS_API_KEY = os.getenv("CAPTIONS_API_KEY", "")
 CAPTIONS_API_BASE = "https://api.captions.ai/api/creator"
+# AI Twins: Ron (Nova), Daniel (Briarwood), Elianna (Eudaimonia)
 
 # Public URL for serving generated images
 PUBLIC_URL = os.getenv(
