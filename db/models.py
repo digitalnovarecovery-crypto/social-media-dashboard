@@ -119,6 +119,20 @@ class Metric(Base):
     total_calls = Column(Integer, default=0)
 
 
+class CanvaOAuthToken(Base):
+    """Store Canva OAuth2 tokens obtained via PKCE flow."""
+    __tablename__ = "canva_oauth_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    access_token = Column(Text, nullable=False)
+    refresh_token = Column(Text)
+    token_type = Column(String, default="Bearer")
+    expires_in = Column(Integer)  # seconds until expiry
+    scope = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class CallRecord(Base):
     """Track individual calls for the 60 calls/month KPI."""
     __tablename__ = "call_records"

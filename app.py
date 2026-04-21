@@ -3,7 +3,11 @@ Run: python app.py -> http://localhost:5001
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
+import os
+import secrets
 import sys
 import threading
 from datetime import datetime, timedelta
@@ -15,10 +19,13 @@ from flask import Flask, flash, jsonify, redirect, render_template, request, ses
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import config
 from config import BRANDS, AGENT_SCHEDULES, FLASK_SECRET, FLASK_DEBUG, PORT
+import requests as http_requests
+
 from db.models import (
-    AgentRun, Brand, CallRecord, CalendarEntry, Metric, OAuthToken, Post,
-    get_db, init_db,
+    AgentRun, Brand, CallRecord, CalendarEntry, CanvaOAuthToken, Metric,
+    OAuthToken, Post, get_db, init_db,
 )
 from agents import ALL_AGENTS, AGENT_DISPLAY
 
@@ -401,6 +408,161 @@ def settings_page():
     return render_template("settings.html", brands=brands, tokens=tokens)
 
 
+# -- Routes: Canva OAuth2 PKCE ------------------------------------------------
+
+CANVA_CLIENT_ID = os.environ.get("CANVA_CLIENT_ID", "OC-AZ2w99K_1Qbw")
+CANVA_CLIENT_SECRET = os.environ.get("CANVA_CLIENT_SECRET", "")
+CANVA_REDIRECT_URI = "https://social-media-dashboard-production-a19f.up.railway.app/oauth/canva/callback"
+CANVA_SCOPES = (
+    "profile:read brandtemplate:content:read design:meta:read asset:write "
+    "design:content:read brandtemplate:content:write design:content:write "
+    "asset:read brandtemplate:meta:read"
+)
+
+
+@app.route("/oauth/canva/start")
+def canva_oauth_start():
+    """Generate PKCE code_verifier + code_challenge, redirect to Canva authorization."""
+    # Generate code_verifier (43-128 chars, URL-safe)
+    code_verifier = secrets.token_urlsafe(64)
+    # Generate code_challenge = base64url(sha256(code_verifier))
+    code_challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
+        .rstrip(b"=")
+        .decode()
+    )
+    # Store verifier in session for the callback
+    session["canva_code_verifier"] = code_verifier
+
+    # Generate state for CSRF protection
+    state = secrets.token_urlsafe(32)
+    session["canva_oauth_state"] = state
+
+    auth_url = (
+        "https://www.canva.com/api/oauth/authorize"
+        f"?response_type=code"
+        f"&client_id={CANVA_CLIENT_ID}"
+        f"&redirect_uri={CANVA_REDIRECT_URI}"
+        f"&scope={CANVA_SCOPES}"
+        f"&code_challenge={code_challenge}"
+        f"&code_challenge_method=S256"
+        f"&state={state}"
+    )
+    return redirect(auth_url)
+
+
+@app.route("/oauth/canva/callback")
+def canva_oauth_callback():
+    """Receive auth code from Canva, exchange for tokens, store in DB."""
+    error = request.args.get("error")
+    if error:
+        flash(f"Canva OAuth error: {error} - {request.args.get('error_description', '')}", "error")
+        return redirect(url_for("settings_page"))
+
+    code = request.args.get("code")
+    state = request.args.get("state")
+
+    # Validate state
+    if not state or state != session.pop("canva_oauth_state", None):
+        flash("Invalid OAuth state — possible CSRF attack", "error")
+        return redirect(url_for("settings_page"))
+
+    code_verifier = session.pop("canva_code_verifier", None)
+    if not code or not code_verifier:
+        flash("Missing authorization code or code verifier", "error")
+        return redirect(url_for("settings_page"))
+
+    # Exchange code for tokens
+    if not CANVA_CLIENT_SECRET:
+        flash("CANVA_CLIENT_SECRET not configured in environment", "error")
+        return redirect(url_for("settings_page"))
+
+    basic_auth = base64.b64encode(f"{CANVA_CLIENT_ID}:{CANVA_CLIENT_SECRET}".encode()).decode()
+
+    try:
+        resp = http_requests.post(
+            "https://api.canva.com/rest/v1/oauth/token",
+            headers={
+                "Authorization": f"Basic {basic_auth}",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            data={
+                "grant_type": "authorization_code",
+                "code_verifier": code_verifier,
+                "code": code,
+                "redirect_uri": CANVA_REDIRECT_URI,
+            },
+            timeout=30,
+        )
+
+        if not resp.ok:
+            flash(f"Token exchange failed: {resp.status_code} — {resp.text[:300]}", "error")
+            return redirect(url_for("settings_page"))
+
+        token_data = resp.json()
+        access_token = token_data.get("access_token")
+        refresh_token = token_data.get("refresh_token")
+
+        if not access_token:
+            flash("No access_token in Canva response", "error")
+            return redirect(url_for("settings_page"))
+
+        # Store in database
+        db = get_db()
+        # Upsert: delete old tokens, insert new one
+        db.query(CanvaOAuthToken).delete()
+        new_token = CanvaOAuthToken(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type=token_data.get("token_type", "Bearer"),
+            expires_in=token_data.get("expires_in"),
+            scope=token_data.get("scope", ""),
+        )
+        db.add(new_token)
+        db.commit()
+        db.close()
+
+        # Update runtime config so Creative Director picks it up immediately
+        config.CANVA_API_TOKEN = access_token
+
+        flash("Canva connected successfully! Token stored.", "success")
+
+    except Exception as e:
+        flash(f"Canva token exchange error: {e}", "error")
+
+    return redirect(url_for("settings_page"))
+
+
+@app.route("/oauth/canva/status")
+def canva_oauth_status():
+    """Check whether a valid Canva token exists."""
+    db = get_db()
+    token = db.query(CanvaOAuthToken).order_by(CanvaOAuthToken.updated_at.desc()).first()
+    db.close()
+
+    if token:
+        # Check if token might be expired
+        age_seconds = (datetime.utcnow() - (token.updated_at or token.created_at)).total_seconds()
+        expires_in = token.expires_in or 3600
+        is_expired = age_seconds > expires_in
+
+        return jsonify({
+            "connected": True,
+            "expired": is_expired,
+            "scope": token.scope,
+            "created_at": token.created_at.isoformat() if token.created_at else None,
+            "updated_at": token.updated_at.isoformat() if token.updated_at else None,
+            "expires_in": token.expires_in,
+            "age_seconds": int(age_seconds),
+            "has_refresh_token": bool(token.refresh_token),
+        })
+    else:
+        return jsonify({
+            "connected": False,
+            "message": "No Canva token found. Visit /oauth/canva/start to connect.",
+        })
+
+
 # -- API routes (for AJAX) ----------------------------------------------------
 
 @app.route("/api/agent-status")
@@ -554,12 +716,23 @@ def startup():
     # Always run seed to update tokens and brand context from env vars / files
     from db.seed import seed
     seed()
+
+    # Load Canva OAuth token from DB into runtime config (survives restarts)
+    try:
+        db = get_db()
+        canva_token = db.query(CanvaOAuthToken).order_by(CanvaOAuthToken.updated_at.desc()).first()
+        if canva_token and canva_token.access_token:
+            config.CANVA_API_TOKEN = canva_token.access_token
+            print("  Canva OAuth token loaded from database")
+        db.close()
+    except Exception:
+        pass  # Table may not exist yet on first run
+
     setup_scheduler()
     print(f"\n  Social Media Team Dashboard — 6 agents scheduled and running\n")
 
 
 # Run startup on import (for gunicorn) — but only once
-import os
 if os.environ.get("WERKZEUG_RUN_MAIN") != "true" or not FLASK_DEBUG:
     startup()
 

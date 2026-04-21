@@ -13,7 +13,7 @@ import requests
 
 from agents.base_agent import BaseAgent
 from config import BRANDS, CANVA_API_TOKEN, CANVA_BRAND_KIT_ID
-from db.models import Post, get_db
+from db.models import CanvaOAuthToken, Post, get_db
 
 CANVA_BASE = "https://api.canva.com/rest/v1"
 
@@ -25,6 +25,19 @@ DESIGN_TYPE_MAP = {
     "linkedin": "facebook_post",  # similar landscape format
     "youtube": "youtube_thumbnail",
 }
+
+
+def _get_canva_token() -> str:
+    """Get Canva API token: try DB first (OAuth2 PKCE), fall back to config env var."""
+    try:
+        db = get_db()
+        token = db.query(CanvaOAuthToken).order_by(CanvaOAuthToken.updated_at.desc()).first()
+        db.close()
+        if token and token.access_token:
+            return token.access_token
+    except Exception:
+        pass
+    return CANVA_API_TOKEN
 
 
 class CreativeDirector(BaseAgent):
@@ -116,12 +129,13 @@ Example: "Create a Facebook post with dark blue background and gold accents. Sho
 
     def _generate_canva_image(self, query: str, platform: str, brand_info: dict) -> str | None:
         """Generate image via Canva Connect API and return the public URL."""
-        if not CANVA_API_TOKEN:
-            self.log("No CANVA_API_TOKEN configured — skipping image generation")
+        canva_token = _get_canva_token()
+        if not canva_token:
+            self.log("No Canva API token configured (DB or env) — skipping image generation")
             return None
 
         headers = {
-            "Authorization": f"Bearer {CANVA_API_TOKEN}",
+            "Authorization": f"Bearer {canva_token}",
             "Content-Type": "application/json",
         }
 
