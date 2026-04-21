@@ -26,9 +26,18 @@ PORT = int(os.getenv("PORT", "5001"))
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-# Canva API for image generation (Creative Director)
+# Canva API (kept for future template-based generation)
 CANVA_API_TOKEN = os.getenv("CANVA_API_TOKEN", "")
 CANVA_BRAND_KIT_ID = os.getenv("CANVA_BRAND_KIT_ID", "")
+
+# Public URL for serving generated images
+PUBLIC_URL = os.getenv(
+    "PUBLIC_URL",
+    os.getenv(
+        "RAILWAY_PUBLIC_DOMAIN",
+        "social-media-dashboard-production-a19f.up.railway.app",
+    ),
+)
 
 # Brand configurations
 BRANDS = {
