@@ -77,6 +77,13 @@ def setup_scheduler():
         hour=7, minute=0,
         id="creative_director", replace_existing=True,
     )
+    # Video Generator: daily at 7:30am (after Creative Director)
+    scheduler.add_job(
+        run_agent_job, "cron",
+        args=["video_generator"],
+        hour=7, minute=30,
+        id="video_generator", replace_existing=True,
+    )
     # Brand Reviewer: daily
     scheduler.add_job(
         run_agent_job, "cron",
@@ -737,6 +744,72 @@ def api_update_post_image(post_id):
     return jsonify({"status": "updated", "post_id": post_id})
 
 
+# -- Video Generation API endpoints ------------------------------------------
+
+@app.route("/api/posts/need-videos")
+def api_posts_need_videos():
+    """Return posts that need video generation (TikTok/YouTube, no video_url)."""
+    db = get_db()
+    brand_id = request.args.get("brand")
+    query = db.query(Post).filter(
+        Post.status.in_(["draft", "approved", "scheduled"]),
+        Post.platform.in_(["tiktok", "youtube"]),
+        (Post.video_url == None) | (Post.video_url == ""),
+    )
+    if brand_id:
+        query = query.filter_by(brand_id=brand_id)
+    posts = query.order_by(Post.id).limit(50).all()
+    result = []
+    for p in posts:
+        result.append({
+            "id": p.id,
+            "brand_id": p.brand_id,
+            "platform": p.platform,
+            "caption": (p.caption or "")[:300],
+            "status": p.status,
+            "scheduled_time": p.scheduled_time.isoformat() if p.scheduled_time else None,
+        })
+    db.close()
+    return jsonify(result)
+
+
+@app.route("/api/posts/<int:post_id>/update-video", methods=["POST"])
+def api_update_post_video(post_id):
+    """Update a post's video_url after Captions.ai generation."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    db = get_db()
+    post = db.query(Post).get(post_id)
+    if not post:
+        db.close()
+        return jsonify({"error": "Post not found"}), 404
+    if data.get("video_url"):
+        post.video_url = data["video_url"]
+    db.commit()
+    db.close()
+    return jsonify({"status": "updated", "post_id": post_id})
+
+
+@app.route("/api/captions/credits")
+def api_captions_credits():
+    """Check Captions.ai API credit balance."""
+    import requests as req
+    api_key = os.getenv("CAPTIONS_API_KEY", "")
+    if not api_key:
+        return jsonify({"error": "CAPTIONS_API_KEY not configured"}), 500
+    try:
+        resp = req.post(
+            "https://api.captions.ai/api/creator/list",
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json={},
+            timeout=15,
+        )
+        return jsonify({"status": resp.status_code, "data": resp.json()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # -- Template Filters ---------------------------------------------------------
 
 @app.template_filter("format_dt")
@@ -783,7 +856,7 @@ def startup():
         pass  # Table may not exist yet on first run
 
     setup_scheduler()
-    print(f"\n  Social Media Team Dashboard — 6 agents scheduled and running\n")
+    print(f"\n  Social Media Team Dashboard — 7 agents scheduled and running\n")
 
 
 # Run startup on import (for gunicorn) — but only once

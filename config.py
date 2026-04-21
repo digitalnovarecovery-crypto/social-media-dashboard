@@ -30,6 +30,10 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 CANVA_API_TOKEN = os.getenv("CANVA_API_TOKEN", "")
 CANVA_BRAND_KIT_ID = os.getenv("CANVA_BRAND_KIT_ID", "")
 
+# Captions.ai / Mirage API (AI Twin video generation)
+CAPTIONS_API_KEY = os.getenv("CAPTIONS_API_KEY", "")
+CAPTIONS_API_BASE = "https://api.captions.ai/api/creator"
+
 # Public URL for serving generated images
 PUBLIC_URL = os.getenv(
     "PUBLIC_URL",
@@ -93,6 +97,7 @@ AGENT_SCHEDULES = {
     "content_strategist": {"day": 1, "hour": 6, "minute": 0},   # 1st of month at 6am
     "caption_writer": {"hour": 6, "minute": 0},                  # Daily 6am
     "creative_director": {"hour": 7, "minute": 0},               # Daily 7am
+    "video_generator": {"hour": 7, "minute": 30},               # Daily 7:30am (after images)
     "brand_reviewer": {"hour": 8, "minute": 0},                  # Daily 8am
     "publisher": {"minute": "*/15"},                              # Every 15 min (checks queue)
     "performance_analyst": {"day_of_week": "mon", "hour": 9},    # Mondays 9am
