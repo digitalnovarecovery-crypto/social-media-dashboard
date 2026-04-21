@@ -591,7 +591,7 @@ def api_agent_status():
     return jsonify(statuses)
 
 
-@app.route("/api/reset-images", methods=["POST"])
+@app.route("/api/reset-images", methods=["GET", "POST"])
 def api_reset_images():
     """Clear all image_url fields so Creative Director can regenerate them."""
     db = get_db()
@@ -605,7 +605,7 @@ def api_reset_images():
     return jsonify({"reset": count, "brand": brand_id or "all"})
 
 
-@app.route("/api/reset-and-regenerate", methods=["POST"])
+@app.route("/api/reset-and-regenerate", methods=["GET", "POST"])
 def api_reset_and_regenerate():
     """Clear image URLs for a brand and re-run Creative Director."""
     brand_id = request.args.get("brand", "all")
