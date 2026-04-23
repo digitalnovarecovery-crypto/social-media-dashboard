@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, Float, Integer, String, Text,
+    Boolean, Column, DateTime, Float, Integer, JSON, String, Text,
     create_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -147,6 +147,25 @@ class CallRecord(Base):
     qualified = Column(Boolean, default=False)  # did they qualify?
     converted = Column(Boolean, default=False)  # did they convert to admission?
     notes = Column(Text)
+
+
+class BlogRepurposeQueue(Base):
+    """Queue for blog posts to be repurposed into social media content."""
+    __tablename__ = "blog_repurpose_queue"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    brand = Column(String(50), nullable=False, index=True)
+    title = Column(String(500), nullable=False)
+    url = Column(String(1000), nullable=False, unique=True)
+    keyword = Column(String(200))
+    excerpt = Column(Text)
+    word_count = Column(Integer)
+    published_at = Column(DateTime, nullable=False)
+    seo_score = Column(Integer)
+    suggested_angles = Column(JSON)
+    repurposed = Column(Boolean, default=False, nullable=False, index=True)
+    repurposed_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 # Engine & session factory — works with both SQLite and PostgreSQL

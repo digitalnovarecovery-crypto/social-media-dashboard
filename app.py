@@ -16,8 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config import BRANDS, AGENT_SCHEDULES, FLASK_SECRET, FLASK_DEBUG, PORT
 from db.models import (
-    AgentRun, Brand, CallRecord, CalendarEntry, Metric, OAuthToken, Post,
-    get_db, init_db,
+    AgentRun, BlogRepurposeQueue, Brand, CallRecord, CalendarEntry, Metric,
+    OAuthToken, Post, get_db, init_db,
 )
 from agents import ALL_AGENTS, AGENT_DISPLAY
 
@@ -527,6 +527,201 @@ def api_reset_images():
     db.commit()
     db.close()
     return jsonify({"status": "ok", "images_cleared": count})
+
+
+# -- CMO API Endpoints --------------------------------------------------------
+
+def require_cmo_key():
+    """Validate X-CMO-Key header against CMO_API_KEY env var."""
+    key = request.headers.get("X-CMO-Key", "")
+    expected = os.environ.get("CMO_API_KEY", "")
+    if not expected or key != expected:
+        return False
+    return True
+
+
+@app.route("/api/cmo-feed")
+def api_cmo_feed():
+    """Weekly social media performance feed for the CMO agent."""
+    if not require_cmo_key():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    brand_filter = request.args.get("brand", "all")
+    days = int(request.args.get("days", "7"))
+
+    db = get_db()
+    now = datetime.utcnow()
+    period_start = now - timedelta(days=days)
+
+    brand_ids = [brand_filter] if brand_filter != "all" else list(BRANDS.keys())
+
+    # Check if any metrics exist in the period
+    metrics_count = db.query(Metric).filter(
+        Metric.brand_id.in_(brand_ids),
+    ).count()
+    metrics_available = metrics_count > 0
+
+    brands_data = {}
+    for bid in brand_ids:
+        # Post counts by status
+        published = db.query(Post).filter(
+            Post.brand_id == bid, Post.status == "published",
+            Post.published_time >= period_start,
+        ).count()
+        scheduled = db.query(Post).filter(
+            Post.brand_id == bid, Post.status.in_(["scheduled", "approved"]),
+        ).count()
+        pending = db.query(Post).filter(
+            Post.brand_id == bid, Post.status == "draft",
+        ).count()
+
+        # Platform breakdown
+        platform_breakdown = {}
+        for platform in ["facebook", "instagram", "tiktok", "linkedin"]:
+            plat_published = db.query(Post).filter(
+                Post.brand_id == bid, Post.platform == platform,
+                Post.status == "published", Post.published_time >= period_start,
+            ).count()
+
+            # Get reach/engagement from Metrics table
+            plat_metrics = db.query(Metric).filter(
+                Metric.brand_id == bid, Metric.platform == platform,
+            ).order_by(Metric.week_ending.desc()).first()
+
+            platform_breakdown[platform] = {
+                "published": plat_published,
+                "reach": plat_metrics.reach if plat_metrics else 0,
+                "engagement": int(plat_metrics.engagement_rate) if plat_metrics else 0,
+                "calls_attributed": plat_metrics.calls_attributed if plat_metrics else 0,
+            }
+
+        # Top performing post (highest reach or engagement)
+        top_post = (
+            db.query(Post)
+            .join(Metric, Metric.best_post_id == Post.platform_post_id, isouter=True)
+            .filter(Post.brand_id == bid, Post.status == "published",
+                    Post.published_time >= period_start)
+            .order_by(Post.published_time.desc())
+            .first()
+        )
+        top_performing = None
+        if top_post:
+            top_performing = {
+                "id": top_post.id,
+                "caption_preview": (top_post.caption or "")[:100],
+                "platform": top_post.platform,
+                "reach": 0,
+                "engagement": 0,
+                "published_at": top_post.published_time.isoformat() if top_post.published_time else None,
+            }
+
+        # Content type breakdown
+        content_type_breakdown = {}
+        if hasattr(Post, "content_type"):
+            for ct in ["educational", "objection_handling", "cta"]:
+                count = db.query(Post).filter(
+                    Post.brand_id == bid, Post.content_type == ct,
+                    Post.published_time >= period_start, Post.status == "published",
+                ).count()
+                if count > 0:
+                    content_type_breakdown[ct] = count
+
+        # AI videos published
+        ai_videos = 0
+        if hasattr(Post, "video_url"):
+            ai_videos = db.query(Post).filter(
+                Post.brand_id == bid, Post.video_url.isnot(None),
+                Post.status == "published", Post.published_time >= period_start,
+            ).count()
+
+        # Agent runs
+        agent_runs = []
+        for agent_key in ["content_strategist", "caption_writer", "creative_director",
+                          "brand_reviewer", "publisher", "performance_analyst"]:
+            last_run_q = db.query(AgentRun).filter_by(agent_name=agent_key)
+            if hasattr(AgentRun, "brand_id"):
+                last_run_q = last_run_q.filter(
+                    (AgentRun.brand_id == bid) | (AgentRun.brand_id.is_(None))
+                )
+            last_run = last_run_q.order_by(AgentRun.started_at.desc()).first()
+            if last_run:
+                agent_runs.append({
+                    "agent": agent_key,
+                    "last_run": last_run.started_at.isoformat() if last_run.started_at else None,
+                    "status": last_run.status or "unknown",
+                })
+
+        brands_data[bid] = {
+            "posts_published": published,
+            "posts_scheduled": scheduled,
+            "posts_pending_approval": pending,
+            "platform_breakdown": platform_breakdown,
+            "top_performing_post": top_performing,
+            "content_type_breakdown": content_type_breakdown,
+            "ai_videos_published": ai_videos,
+            "agent_runs": agent_runs,
+        }
+
+    db.close()
+
+    return jsonify({
+        "generated_at": now.isoformat() + "Z",
+        "period_days": days,
+        "metrics_available": metrics_available,
+        "brands": brands_data,
+    })
+
+
+@app.route("/api/blog-repurpose", methods=["POST"])
+def api_blog_repurpose():
+    """Queue a published blog post for social media repurposing."""
+    if not require_cmo_key():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(force=True)
+
+    # Validate required fields
+    missing = [f for f in ["brand", "title", "url", "published_at"] if not data.get(f)]
+    if missing:
+        return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
+
+    brand = data["brand"]
+    if brand not in BRANDS:
+        return jsonify({"error": f"Unknown brand: {brand}. Must be one of: {', '.join(BRANDS.keys())}"}), 400
+
+    db = get_db()
+
+    # Check for duplicate URL
+    existing = db.query(BlogRepurposeQueue).filter_by(url=data["url"]).first()
+    if existing:
+        db.close()
+        return jsonify({
+            "status": "already_queued",
+            "repurpose_id": existing.id,
+            "message": "This blog post is already in the repurpose queue",
+        }), 200
+
+    entry = BlogRepurposeQueue(
+        brand=brand,
+        title=data["title"],
+        url=data["url"],
+        keyword=data.get("keyword", ""),
+        excerpt=data.get("excerpt", ""),
+        word_count=data.get("word_count"),
+        published_at=datetime.fromisoformat(data["published_at"].replace("Z", "+00:00")),
+        seo_score=data.get("seo_score"),
+        suggested_angles=data.get("suggested_social_angles"),
+    )
+    db.add(entry)
+    db.commit()
+    repurpose_id = entry.id
+    db.close()
+
+    return jsonify({
+        "status": "queued",
+        "repurpose_id": repurpose_id,
+        "message": "Queued for next content calendar",
+    }), 201
 
 
 # -- Template Filters ---------------------------------------------------------
