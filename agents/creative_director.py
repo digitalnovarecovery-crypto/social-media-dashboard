@@ -703,12 +703,21 @@ def _draw_brand_bar(
 # Layout dispatcher
 # ---------------------------------------------------------------------------
 
+# --- v2 layouts (see agents/layouts_v2.py) ---
+from agents.layouts_v2 import (
+    render_quote as _v2_render_quote,
+    render_bold_headline as _v2_render_bold_headline,
+    render_cta as _v2_render_cta,
+    render_service_list as _v2_render_service_list,
+    render_motivational as _v2_render_motivational,
+)
+
 LAYOUT_RENDERERS = {
-    "quote": render_quote,
-    "bold_headline": render_bold_headline,
-    "cta": render_cta,
-    "service_list": render_service_list,
-    "motivational": render_motivational,
+    "quote": _v2_render_quote,
+    "bold_headline": _v2_render_bold_headline,
+    "cta": _v2_render_cta,
+    "service_list": _v2_render_service_list,
+    "motivational": _v2_render_motivational,
 }
 
 
