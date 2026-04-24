@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import BRANDS
 from db.models import Brand, OAuthToken, init_db, get_db
+from sqlalchemy.exc import IntegrityError
 
 # Map brand_id to env var names for all platform tokens
 TOKEN_MAP = {
@@ -118,7 +119,11 @@ def seed():
                 if phone:
                     existing_token.tracking_phone = phone
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Another worker raced ahead and seeded first — safe to ignore.
+        db.rollback()
     db.close()
     print("Database seeded with 3 brands, brand context, and platform configs.")
 
