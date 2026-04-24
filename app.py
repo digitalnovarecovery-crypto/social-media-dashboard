@@ -752,17 +752,38 @@ def status_color(status):
 # -- Startup (runs for both gunicorn and direct execution) -------------------
 
 def startup():
-    """Initialize DB, seed, and start scheduler."""
-    init_db()
-    db = get_db()
-    if db.query(Brand).count() == 0:
-        db.close()
-        from db.seed import seed
-        seed()
-    else:
-        db.close()
-    setup_scheduler()
-    print(f"\n  Social Media Team Dashboard — 6 agents scheduled and running\n")
+    """Initialize DB, seed, and start scheduler.
+
+    Wrapped in a file lock so that when gunicorn forks multiple workers,
+    only ONE runs init_db + seed — prevents the UNIQUE constraint failed
+    and "table already exists" races that were crashing boot.
+    """
+    import fcntl, traceback
+    lockfile = open("/tmp/social_media_startup.lock", "w")
+    try:
+        fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX)
+        try:
+            init_db()
+            db = get_db()
+            try:
+                need_seed = db.query(Brand).count() == 0
+            finally:
+                db.close()
+            if need_seed:
+                from db.seed import seed
+                seed()
+        except Exception as e:
+            # Log but do not crash — another worker may have raced ahead.
+            print(f"[startup] DB init/seed skipped: {type(e).__name__}: {e}", flush=True)
+            traceback.print_exc()
+    finally:
+        fcntl.flock(lockfile.fileno(), fcntl.LOCK_UN)
+        lockfile.close()
+    try:
+        setup_scheduler()
+    except Exception as e:
+        print(f"[startup] scheduler setup failed: {e}", flush=True)
+    print(f"\n  Social Media Team Dashboard — 6 agents scheduled and running\n", flush=True)
 
 
 # Run startup on import (for gunicorn) — but only once
